@@ -1,0 +1,6 @@
+{
+  "sql": "SELECT name AS 'Table Name' FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE 'auth_%'",
+  "thought": "Heuristic Engine: Detected request for database schema/table listing.",
+  "confidence": 0.95,
+  "model": "Smart Heuristic"
+}

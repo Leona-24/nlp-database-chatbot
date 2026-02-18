@@ -1,0 +1,149 @@
+[
+  {
+    "name": "customers",
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "primary_key": 1
+      },
+      {
+        "name": "name",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "email",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "city",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "primary_key": 0
+      }
+    ]
+  },
+  {
+    "name": "orders",
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "primary_key": 1
+      },
+      {
+        "name": "customer_id",
+        "type": "INTEGER",
+        "primary_key": 0,
+        "foreign_key": "customers.id"
+      },
+      {
+        "name": "total_amount",
+        "type": "REAL",
+        "primary_key": 0
+      },
+      {
+        "name": "order_date",
+        "type": "DATE",
+        "primary_key": 0
+      }
+    ]
+  },
+  {
+    "name": "students",
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "primary_key": 1
+      },
+      {
+        "name": "name",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "department",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "gpa",
+        "type": "REAL",
+        "primary_key": 0
+      }
+    ]
+  },
+  {
+    "name": "user_products",
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "INTEGER",
+        "primary_key": 0,
+        "foreign_key": "users.id"
+      },
+      {
+        "name": "product",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "no_of_items",
+        "type": "INTEGER",
+        "primary_key": 0
+      }
+    ]
+  },
+  {
+    "name": "users",
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "primary_key": 1
+      },
+      {
+        "name": "username",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "password_hash",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "primary_key": 0
+      }
+    ]
+  },
+  {
+    "name": "users_info",
+    "columns": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "primary_key": 1
+      },
+      {
+        "name": "name",
+        "type": "TEXT",
+        "primary_key": 0
+      },
+      {
+        "name": "city",
+        "type": "TEXT",
+        "primary_key": 0
+      }
+    ]
+  }
+]
