@@ -1,5 +1,0 @@
---- NEW QUERY ---
-Query: tell me number of person brought pen
-Match found: pen in user_products.product
-Filter groups: {'pen': ["LOWER(user_products.product) = 'pen'"]}
-Found tables: ['users', 'orders', 'user_products']
