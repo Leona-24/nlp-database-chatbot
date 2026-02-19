@@ -10,6 +10,7 @@ import bcrypt
 
 from .database import execute_query, init_db, init_auth_db, get_user, create_user
 from .nlp_service import nlp_engine
+from .rag_service import rag_service
 
 print("\n" + "="*50)
 print("SERVER IS STARTING WITH LATEST AUTH CODE")
@@ -162,7 +163,21 @@ def connect_database(config: Dict[str, Any]):
     
     # Return schema upon successful connection
     schema = get_schema()
-    return {"message": "Connected", "schema": schema, "details": result}
+    
+    # Auto-index schema into RAG vector store
+    rag_indexed = rag_service.index_schema(schema)
+    rag_status = rag_service.get_status()
+    
+    return {
+        "message": "Connected", 
+        "schema": schema, 
+        "details": result,
+        "rag": {
+            "indexed": rag_indexed,
+            "tables_indexed": rag_status["indexed_tables"],
+            "available": rag_status["available"]
+        }
+    }
 
 @app.get("/api/schema")
 def get_current_schema():
@@ -171,7 +186,18 @@ def get_current_schema():
     """
     from .database import get_schema
     schema = get_schema()
+    
+    # Ensure RAG index is up to date
+    rag_service.index_schema(schema)
+    
     return {"schema": schema}
+
+@app.get("/api/rag-status")
+def get_rag_status():
+    """
+    Get the current status of the RAG (Retrieval-Augmented Generation) system.
+    """
+    return rag_service.get_status()
 
 @app.post("/api/query", response_model=QueryResponse)
 def handle_query(request: QueryRequest):

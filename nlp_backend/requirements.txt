@@ -9,3 +9,5 @@ pymysql
 psycopg2-binary
 openai
 python-dotenv
+chromadb
+scikit-learn

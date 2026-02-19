@@ -4,6 +4,9 @@ import difflib
 from openai import OpenAI
 from typing import List, Dict, Any, Optional, Tuple
 
+# RAG Service for schema retrieval
+from .rag_service import rag_service
+
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
@@ -197,7 +200,7 @@ class NLPEngine:
         q = query.lower()
 
         for table in schema:
-            t_name = table["name"].lower()
+            t_name = table["name"].lower()     
             t_singular = t_name.rstrip("s") if t_name.endswith("s") else t_name
 
             # Direct or singular match
@@ -710,52 +713,60 @@ class NLPEngine:
         """
         Intelligent intent-understanding NLP engine.
         Converts natural language to SELECT-only SQL using LLM or heuristic fallback.
+        Uses RAG to retrieve only relevant tables for large schemas.
         """
         if not schema:
             return {"sql": "", "thought": "No schema provided.", "confidence": 0}
 
         query_lower = natural_query.lower().strip()
+        
+        # ── RAG: Index schema if not already indexed ──
+        rag_active = False
+        if rag_service.is_available or (not rag_service.is_available and len(schema) > 5):
+            rag_service.index_schema(schema)
 
         if self.client:
             try:
-                # Build schema text
+                # ── RAG: Retrieve only relevant tables for the LLM ──
+                if rag_service.is_available and len(schema) > 5:
+                    llm_schema = rag_service.retrieve_relevant_tables(natural_query, schema)
+                    rag_active = True
+                    print(f"🔍 RAG active: {len(llm_schema)}/{len(schema)} tables selected for LLM")
+                else:
+                    llm_schema = schema
+                
+                # Build schema text from RAG-filtered or full schema
                 schema_text = ""
-                for table in schema:
+                for table in llm_schema:
                     cols = [f"{c['name']} ({c['type']})" for c in table["columns"]]
                     schema_text += f"\nTable: {table['name']}\nColumns: {', '.join(cols)}\n"
 
-                # --- Advanced Join Enrichment ---
-                # Build an explicit relationship list for the LLM to understand connections better
                 relationships_text = ""
-                for table in schema:
+                for table in llm_schema:
                     for col in table["columns"]:
                         if "foreign_key" in col:
                             relationships_text += f"- {table['name']}.{col['name']} = {col['foreign_key']}\n"
                 
-                # Add implicit relationships (convention based)
-                relationships_text += "- users_info.id = users.id\n"
-                relationships_text += "- orders.customer_id = customers.id\n"
-
                 system_prompt = f"""
                 You are a highly advanced Text-to-SQL AI with enterprise-grade security.
                 🔒 RULE 1: ONLY generate SELECT queries. NEVER modify data.
-                🔒 RULE 2: When listing database tables, EXCLUDE system/internal tables.
-                🔒 RULE 3: STRICT MODE - You MUST use ONLY the table and column names provided in the SCHEMA.
-                🔒 RULE 4: RELATIONSHIPS - Use the explicit relationships provided below to perform JOINs.
-                🔒 RULE 5: MULTI-TABLE JOINS - If a query involves columns from multiple tables, ensure you use the correct JOIN path.
+                🔒 RULE 2: STRICT MODE - You MUST use ONLY the table and column names provided in the SCHEMA.
+                🔒 RULE 3: RELATIONSHIPS - Use the explicit relationships provided below to perform JOINs.
+                🔒 RULE 4: MULTI-TABLE JOINS - If a query involves columns from multiple tables, ensure you use the correct JOIN path.
                 
                 🎯 DB DIALECT: {dialect}
                 
                 RELATIONSHIPS:
-                {relationships_text}
+                {relationships_text if relationships_text else "No explicit foreign keys provided. Use column name matching."}
                 
                 SCHEMA:
                 {schema_text}
 
-                ### EXAMPLE JOINS:
-                - "Show all shoppers and their orders" -> SELECT * FROM users JOIN orders ON users.id = orders.user_id
-                - "Find products bought by Alice" -> SELECT user_products.* FROM user_products JOIN users ON user_products.user_id = users.id WHERE users.username = 'Alice'
-                - "How many orders from Chennai?" -> SELECT COUNT(*) FROM orders JOIN customers ON orders.customer_id = customers.id WHERE customers.city = 'Chennai'
+                ### GUIDELINES:
+                - Use JOINs when data is split across tables.
+                - Use standard aggregate functions (COUNT, SUM, AVG, MIN, MAX) when asked for totals/averages.
+                - Use WHERE clauses for filtering.
+                - Respond with valid SQL matching the {dialect} dialect.
 
                 Respond ONLY with JSON: {{"sql": "...", "thought": "..."}}
                 """
@@ -784,11 +795,15 @@ class NLPEngine:
                             return {"sql": "-- Not Found", "thought": error_msg, "confidence": 0}
 
                         model_display = "GPT-4o" if "gpt-4o" in MODEL_NAME.lower() else "Llama 3.3 (70B)"
+                        rag_note = f" [RAG: {len(llm_schema)}/{len(schema)} tables]" if rag_active else ""
                         return {
                             "sql": sql_out,
-                            "thought": f"{model_display} Joined tables: {', '.join(potential_tables + join_tables)}. {result.get('thought', '')}",
+                            "thought": f"{model_display}{rag_note} Joined tables: {', '.join(potential_tables + join_tables)}. {result.get('thought', '')}",
                             "confidence": 0.99,
-                            "model": model_display
+                            "model": model_display,
+                            "rag_active": rag_active,
+                            "rag_tables_used": len(llm_schema) if rag_active else len(schema),
+                            "total_tables": len(schema)
                         }
                     else:
                         print(f"LLM Hallucinated tables: {potential_tables}. Falling back.")

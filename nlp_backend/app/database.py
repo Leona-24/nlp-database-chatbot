@@ -1,16 +1,26 @@
+import os
 from sqlalchemy import create_engine, text, inspect
 import pandas as pd
 from typing import List, Dict, Any, Optional
 
+# Base directory for the database files
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+
+# Ensure data directory exists
+os.makedirs(DATA_DIR, exist_ok=True)
+
 # Global engines
 engine = None  # Dynamic engine for user queries
-auth_engine = create_engine("sqlite:///./data/auth.db", connect_args={"check_same_thread": False})
+auth_db_path = os.path.join(DATA_DIR, "auth.db")
+auth_engine = create_engine(f"sqlite:///{auth_db_path}", connect_args={"check_same_thread": False})
 
 def get_engine():
     global engine
     if engine is None:
         # Default fallback to local SQLite for demo queries
-        engine = create_engine("sqlite:///./data/app.db", connect_args={"check_same_thread": False})
+        app_db_path = os.path.join(DATA_DIR, "app.db")
+        engine = create_engine(f"sqlite:///{app_db_path}", connect_args={"check_same_thread": False})
     return engine
 
 def get_auth_engine():
