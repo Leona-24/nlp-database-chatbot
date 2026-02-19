@@ -16,7 +16,8 @@ A premium, full-stack application that bridges the gap between natural language 
 - **Dual-Layer Architecture**: Uses **Llama 3.3 (70B)** via Groq as primary intelligence with a custom **Smart Heuristic Engine** as a robust fallback.
 - **Schema-Agnostic**: Dynamically inspects any connected database (PostgreSQL, MySQL, SQLite) to understand its unique structure without prior training.
 - **Typo Tolerance**: Handles slang and spelling mistakes (e.g., "hw many usrs") using fuzzy logic.
-- **Explainability**: View the AI's "thought process" and the generated SQL before results are shown.
+- **Industrial-Scale RAG**: Implements **Retrieval-Augmented Generation (RAG)** using TF-IDF and Cosine Similarity. It selectively retrieves the most relevant table schemas for each query, allowing the system to scale to databases with hundreds of tables without hitting LLM token limits or losing accuracy.
+- **Explainability**: View the AI's "thought process," the RAG retrieval status, and the generated SQL before results are shown.
 
 ### 📊 Database Connectivity
 - **Multi-DB Support**: Out-of-the-box support for **SQLite**, **PostgreSQL**, and **MySQL**.
@@ -37,6 +38,7 @@ A premium, full-stack application that bridges the gap between natural language 
 - **Security**: [Bcrypt](https://pypi.org/project/bcrypt/) & [python-jose](https://pypi.org/project/python-jose/)
 - **AI Stack**:
   - **Primary**: Llama 3.3 70B (State-of-the-art LLM)
+  - **Retrieval (RAG)**: Custom TF-IDF Vectorizer with Cosine Similarity for semantic schema selection.
   - **Inference**: [Groq](https://groq.com/) / [OpenAI](https://openai.com/)
   - **Fallback**: Custom Heuristic Engine (Fuzzy matching + Regex logic)
 - **DB Layer**: [SQLAlchemy](https://www.sqlalchemy.org/)
