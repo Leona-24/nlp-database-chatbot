@@ -228,8 +228,8 @@ def execute_query(sql_query: str) -> Dict[str, Any]:
             result = conn.execute(text(sql_query))
             # Get column names
             columns = result.keys()
-            # Fetch all rows (limit to 1000 for safety)
-            rows = result.fetchmany(1000)
+            # Fetch all rows (frontend handles pagination)
+            rows = result.fetchall()
             data = [dict(zip(columns, row)) for row in rows]
             execution_time = round(time.time() - start_time, 3)
             return {"columns": list(columns), "data": data, "execution_time": execution_time}
