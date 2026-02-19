@@ -709,7 +709,7 @@ class NLPEngine:
     # ──────────────────────────────────────────────────────
     # MAIN ENTRY: generate_sql
     # ──────────────────────────────────────────────────────
-    def generate_sql(self, natural_query: str, schema: List[Dict[str, Any]] = None, dialect: str = "sqlite") -> Dict[str, Any]:
+    def generate_sql(self, natural_query: str, schema: List[Dict[str, Any]] = None, dialect: str = "sqlite", history: List[Dict[str, str]] = None) -> Dict[str, Any]:
         """
         Intelligent intent-understanding NLP engine.
         Converts natural language to SELECT-only SQL using LLM or heuristic fallback.
@@ -763,7 +763,8 @@ class NLPEngine:
                 🔒 RULE 3: RELATIONSHIPS - Use the explicit relationships provided below to perform JOINs.
                 🔒 RULE 4: MULTI-TABLE JOINS - If a query involves columns from multiple tables, ensure you use the correct JOIN path.
                 🔒 RULE 5: INCOMPLETE QUESTIONS - If the user's question is incomplete, nonsensical, or too vague to form a query, set "sql" to "-- Not Found" and "thought" to "Your question seems incomplete. Can you complete it?"
-                
+                🔒 RULE 6: CONTEXT AWARENESS - If the user asks a follow-up question (e.g., "now show me only those from..."), use the conversation history to understand the target table and previous filters.
+
                 🎯 DB DIALECT: {dialect}
                 
                 RELATIONSHIPS:
@@ -775,6 +776,7 @@ class NLPEngine:
                 ### GUIDELINES:
                 - 🎯 **FILTERING**: If a name, date, or ID is mentioned, use a WHERE clause for precision.
                 - 🎯 **COLUMNS**: Only select columns relevant to the question.
+                - 🎯 **GROUPING**: If a result contains naturally repeating entities (e.g., multiple orders for the same user, or multiple downtime logs for one machine), use `SUM()` and `GROUP BY` to provide a summarized view instead of raw logs, unless the user specifically asks for "all records", "logs", or "every entry".
                 - Use JOINs when data is split across tables.
                 - Use standard aggregate functions (COUNT, SUM, AVG, MIN, MAX) when asked for totals/averages.
                 - Respond with valid SQL matching the {dialect} dialect.
@@ -782,9 +784,22 @@ class NLPEngine:
                 Respond ONLY with JSON: {{"sql": "...", "thought": "..."}}
                 """
 
+                # Prepare messages with history
+                messages = [{"role": "system", "content": system_prompt}]
+                if history:
+                    for entry in history[-5:]: # Use last 5 messages for context
+                        role = "user" if entry["type"] == "user" else "assistant"
+                        content = entry["content"]
+                        # If bot message has SQL, prepend it to content to help AI see previous query logic
+                        if entry.get("sql"):
+                            content = f"[Previous SQL: {entry['sql']}] {content}"
+                        messages.append({"role": role, "content": content})
+                
+                messages.append({"role": "user", "content": natural_query})
+
                 response = self.client.chat.completions.create(
                     model=MODEL_NAME,
-                    messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": natural_query}],
+                    messages=messages,
                     response_format={"type": "json_object"},
                     temperature=0.1
                 )

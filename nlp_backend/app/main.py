@@ -41,6 +41,7 @@ init_auth_db()
 
 class QueryRequest(BaseModel):
     query: str
+    history: List[Dict[str, str]] = []
 
 class QueryResponse(BaseModel):
     sql_query: str
@@ -211,8 +212,13 @@ def handle_query(request: QueryRequest):
         engine = get_engine()
         dialect = engine.dialect.name
         
-        # 2. NLP Processing with dynamic schema and dialect
-        nlp_response = nlp_engine.generate_sql(request.query, schema, dialect=dialect)
+        # 2. NLP Processing with dynamic schema, dialect, and history
+        nlp_response = nlp_engine.generate_sql(
+            request.query, 
+            schema, 
+            dialect=dialect, 
+            history=request.history
+        )
         sql_query = nlp_response["sql"]
         thought = nlp_response["thought"]
 

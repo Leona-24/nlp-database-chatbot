@@ -65,7 +65,14 @@ export const useChat = (onLogout: () => void) => {
             const response = await fetch(`${API_URL}/api/query`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: userMessage.content })
+                body: JSON.stringify({
+                    query: userMessage.content,
+                    history: messages.slice(-5).map(m => ({
+                        type: m.type,
+                        content: m.content,
+                        sql: m.sql
+                    }))
+                })
             });
 
             if (!response.ok) {
