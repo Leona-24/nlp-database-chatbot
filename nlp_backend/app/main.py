@@ -215,6 +215,16 @@ def handle_query(request: QueryRequest):
         nlp_response = nlp_engine.generate_sql(request.query, schema, dialect=dialect)
         sql_query = nlp_response["sql"]
         thought = nlp_response["thought"]
+
+        # 2.5 Quick Check for Incomplete Query
+        if sql_query == "-- Not Found":
+             return {
+                "sql_query": "",
+                "results": [],
+                "message": thought,
+                "thought": thought,
+                "confidence": 0
+            }
         
         # 3. Database Execution
         execution_result = execute_query(sql_query)
@@ -236,7 +246,8 @@ def handle_query(request: QueryRequest):
             "results": data,
             "message": f"Found {len(data)} results.",
             "thought": thought,
-            "confidence": nlp_response.get("confidence", 0)
+            "confidence": nlp_response.get("confidence", 0),
+            "execution_time": execution_result.get("execution_time", 0.1)
         }
         
     except Exception as e:

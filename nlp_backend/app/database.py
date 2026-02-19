@@ -223,12 +223,16 @@ def execute_query(sql_query: str) -> Dict[str, Any]:
             if not clean_query.upper().startswith("SELECT"):
                  return {"error": "🚫 SECURITY: Only SELECT queries are supported. No data modifications allowed."}
 
+            import time
+            start_time = time.time()
             result = conn.execute(text(sql_query))
             # Get column names
             columns = result.keys()
-            # Fetch all rows
-            data = [dict(zip(columns, row)) for row in result.fetchall()]
-            return {"columns": list(columns), "data": data}
+            # Fetch all rows (limit to 1000 for safety)
+            rows = result.fetchmany(1000)
+            data = [dict(zip(columns, row)) for row in rows]
+            execution_time = round(time.time() - start_time, 3)
+            return {"columns": list(columns), "data": data, "execution_time": execution_time}
             
     except Exception as e:
         return {"error": str(e)}

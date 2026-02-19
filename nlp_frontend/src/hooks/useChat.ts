@@ -92,12 +92,12 @@ export const useChat = (onLogout: () => void) => {
             const botMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 type: 'bot',
-                content: data.message || `Found ${rows.length} results.`,
+                content: data.thought?.split('. ')[0] || data.message || `Found ${rows.length} results.`,
                 sql: data.sql_query,
                 results: {
                     columns,
                     rows,
-                    executionTime: 0.1,
+                    executionTime: data.execution_time || 0.1,
                     rowCount: rows.length
                 },
                 thought: data.thought,

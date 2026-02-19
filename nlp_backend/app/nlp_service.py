@@ -720,6 +720,15 @@ class NLPEngine:
 
         query_lower = natural_query.lower().strip()
         
+        # ── QUALITY GUARD: Reject too short or nonsensical queries ──
+        if len(query_lower) < 2:
+            return {
+                "sql": "-- Not Found", 
+                "thought": "Your question seems incomplete. Can you complete it?", 
+                "confidence": 0,
+                "model": "Quality Guard"
+            }
+        
         # ── RAG: Index schema if not already indexed ──
         rag_active = False
         if rag_service.is_available or (not rag_service.is_available and len(schema) > 5):
@@ -753,6 +762,7 @@ class NLPEngine:
                 🔒 RULE 2: STRICT MODE - You MUST use ONLY the table and column names provided in the SCHEMA.
                 🔒 RULE 3: RELATIONSHIPS - Use the explicit relationships provided below to perform JOINs.
                 🔒 RULE 4: MULTI-TABLE JOINS - If a query involves columns from multiple tables, ensure you use the correct JOIN path.
+                🔒 RULE 5: INCOMPLETE QUESTIONS - If the user's question is incomplete, nonsensical, or too vague to form a query, set "sql" to "-- Not Found" and "thought" to "Your question seems incomplete. Can you complete it?"
                 
                 🎯 DB DIALECT: {dialect}
                 
@@ -763,9 +773,10 @@ class NLPEngine:
                 {schema_text}
 
                 ### GUIDELINES:
+                - 🎯 **FILTERING**: If a name, date, or ID is mentioned, use a WHERE clause for precision.
+                - 🎯 **COLUMNS**: Only select columns relevant to the question.
                 - Use JOINs when data is split across tables.
                 - Use standard aggregate functions (COUNT, SUM, AVG, MIN, MAX) when asked for totals/averages.
-                - Use WHERE clauses for filtering.
                 - Respond with valid SQL matching the {dialect} dialect.
 
                 Respond ONLY with JSON: {{"sql": "...", "thought": "..."}}
