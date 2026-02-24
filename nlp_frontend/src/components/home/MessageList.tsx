@@ -4,6 +4,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import ProcessingSteps from './ProcessingSteps';
 import SQLDisplay from './SQLDisplay';
 import ResultsTable from './ResultsTable';
+import Feedback from './Feedback';
 import type { Message } from '../../types';
 
 import config from '../../config/env';
@@ -105,6 +106,10 @@ const MessageList = ({
 
                                 {message.results && (
                                     <ResultsTable result={message.results} />
+                                )}
+
+                                {message.type === 'bot' && (
+                                    <Feedback messageId={message.id} />
                                 )}
                             </div>
                         </div>

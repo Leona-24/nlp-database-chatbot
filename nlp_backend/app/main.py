@@ -7,6 +7,8 @@ import textwrap
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 import bcrypt
+import csv
+import os
 
 from .database import execute_query, init_db, init_auth_db, get_user, create_user
 from .nlp_service import nlp_engine
@@ -57,6 +59,11 @@ class UserRegister(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+
+class FeedbackRequest(BaseModel):
+    message_id: str
+    status: str
+    how: Optional[str] = None
 
 # Helper functions
 def verify_password(plain_password: str, hashed_password: str):
@@ -145,6 +152,37 @@ def read_users_me(token: str = Depends(oauth2_scheme)):
         raise HTTPException(status_code=401, detail="User not found")
     
     return {"username": user["username"]}
+
+
+@app.post("/api/feedback")
+def submit_feedback(feedback: FeedbackRequest):
+    """
+    Submits user feedback and saves it to a CSV file.
+    """
+    print(f"FEEDBACK RECEIVED: ID={feedback.message_id}, Status={feedback.status}, How={feedback.how}")
+    
+    # Save to CSV
+    feedback_file = os.path.join(os.path.dirname(__file__), "..", "data", "feedback.csv")
+    file_exists = os.path.isfile(feedback_file)
+    
+    try:
+        with open(feedback_file, mode='a', newline='', encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # Write header if new file
+            if not file_exists:
+                writer.writerow(["timestamp", "message_id", "status", "comment"])
+            
+            writer.writerow([
+                datetime.utcnow().isoformat(),
+                feedback.message_id,
+                feedback.status,
+                feedback.how or ""
+            ])
+    except Exception as e:
+        print(f"ERROR SAVING FEEDBACK: {str(e)}")
+        # We don't raise an exception here as it shouldn't break the user experience
+        
+    return {"message": "Feedback submitted successfully"}
 
 
 @app.get("/")
