@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, RefreshCw } from 'lucide-react';
+import { Sparkles, RefreshCw, CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,9 +17,12 @@ interface LoginProps {
 
 const Login = ({ onLogin }: LoginProps) => {
     const [isLogin, setIsLogin] = useState(true);
-    const [username, setUsername] = useState('');
+    const [identifier, setIdentifier] = useState(''); // Can be username or email
+    const [username, setUsername] = useState('');     // Only for signup
+    const [email, setEmail] = useState('');           // Only for signup
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,45 +34,61 @@ const Login = ({ onLogin }: LoginProps) => {
 
         setLoading(true);
 
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         try {
             if (isLogin) {
+                console.log('Attempting login with:', identifier);
                 const formData = new URLSearchParams();
-                formData.append('username', username);
+                formData.append('username', identifier);
                 formData.append('password', password);
 
                 const res = await fetch(`${API_URL}/api/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: formData
+                    body: formData,
+                    signal: controller.signal
                 });
 
                 const data = await res.json();
+                clearTimeout(timeoutId);
+                console.log('Login response:', res.status, data);
+
                 if (res.ok) {
-                    onLogin(data.access_token, username);
+                    onLogin(data.access_token, data.username || identifier);
                     toast.success('Logged in successfully');
                 } else {
                     toast.error(data.detail || 'Login failed');
                 }
             } else {
+                console.log('Attempting registration for:', username, email);
                 const res = await fetch(`${API_URL}/api/register`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({ username, email, password }),
+                    signal: controller.signal
                 });
 
                 const data = await res.json();
-
+                clearTimeout(timeoutId);
+                console.log('Registration response:', res.status, data);
                 if (res.ok) {
-                    toast.success('Account has been created');
+                    setShowSuccessModal(true);
                     setUsername('');
+                    setEmail('');
                     setPassword('');
-                    setIsLogin(true);
+                    // User stays on signup page to manually go to login
                 } else {
-                    toast.error(data.detail || 'Registration failed');
+                    toast.error(data.detail || 'Account already exists');
                 }
             }
         } catch (err) {
-            toast.error('Server error. Is the backend running?');
+            if (err instanceof Error && err.name === 'AbortError') {
+                toast.error('Connection timeout. The server is taking too long to respond.');
+            } else {
+                toast.error('Server error. Is the backend running?');
+            }
         } finally {
             setLoading(false);
         }
@@ -96,17 +115,45 @@ const Login = ({ onLogin }: LoginProps) => {
                 </CardHeader>
                 <CardContent className="pt-6">
                     <form onSubmit={handleSubmit} className="space-y-4">
-                        <div className="space-y-2">
-                            <Label className="text-slate-300">Username</Label>
-                            <Input
-                                placeholder="johndoe"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                autoComplete="off"
-                                className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:ring-purple-500"
-                                required
-                            />
-                        </div>
+                        {isLogin ? (
+                            <div className="space-y-2">
+                                <Label className="text-slate-300">Username or Email</Label>
+                                <Input
+                                    placeholder="johndoe or john@example.com"
+                                    value={identifier}
+                                    onChange={(e) => setIdentifier(e.target.value)}
+                                    autoComplete="off"
+                                    className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:ring-purple-500"
+                                    required
+                                />
+                            </div>
+                        ) : (
+                            <>
+                                <div className="space-y-2">
+                                    <Label className="text-slate-300">Username</Label>
+                                    <Input
+                                        placeholder="johndoe"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        autoComplete="off"
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:ring-purple-500"
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label className="text-slate-300">Email ID</Label>
+                                    <Input
+                                        type="email"
+                                        placeholder="john@example.com"
+                                        value={email}
+                                        onChange={(e) => setEmail(e.target.value)}
+                                        autoComplete="off"
+                                        className="bg-white/5 border-white/10 text-white placeholder:text-slate-600 focus:ring-purple-500"
+                                        required
+                                    />
+                                </div>
+                            </>
+                        )}
                         <div className="space-y-2">
                             <Label className="text-slate-300">Password</Label>
                             <Input
@@ -145,6 +192,30 @@ const Login = ({ onLogin }: LoginProps) => {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Success Modal */}
+            {showSuccessModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="w-full max-w-sm bg-white rounded-3xl p-8 text-center shadow-2xl transform animate-in zoom-in-95 duration-300">
+                        <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                            <CheckCircle2 className="w-10 h-10 text-green-500" />
+                        </div>
+                        <h3 className="text-2xl font-bold text-slate-800 mb-2">Success!</h3>
+                        <p className="text-slate-500 mb-8">
+                            Account has been created
+                        </p>
+                        <Button
+                            className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-xl h-12"
+                            onClick={() => {
+                                setShowSuccessModal(false);
+                                setIsLogin(true);
+                            }}
+                        >
+                            Got it, thanks!
+                        </Button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

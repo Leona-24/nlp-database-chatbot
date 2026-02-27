@@ -126,67 +126,73 @@ def init_db():
     current_engine = get_engine()
     if "app.db" in str(current_engine.url):
         with current_engine.connect() as conn:
-            # Create Sample Tables
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS students (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    department TEXT,
-                    gpa REAL
-                )
-            """))
-            
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS customers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT,
-                    email TEXT,
-                    city TEXT,
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                )
-            """))
-            
-            conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS orders (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    customer_id INTEGER,
-                    total_amount REAL,
-                    order_date DATE,
-                    FOREIGN KEY(customer_id) REFERENCES customers(id)
-                )
-            """))
+            with conn.begin():
+                # Create Sample Tables
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS students (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT,
+                        department TEXT,
+                        gpa REAL
+                    )
+                """))
+                
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS customers (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        name TEXT,
+                        email TEXT,
+                        city TEXT,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                
+                conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS orders (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        customer_id INTEGER,
+                        total_amount REAL,
+                        order_date DATE,
+                        FOREIGN KEY(customer_id) REFERENCES customers(id)
+                    )
+                """))
 
-            # Check if data exists, if not seed it
-            try:
-                result = conn.execute(text("SELECT COUNT(*) FROM students")).scalar()
-                if result == 0:
-                    print("Seeding sample database...")
-                    conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Alice', 'CS', 3.8)"))
-                    conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Bob', 'Arts', 3.5)"))
-                    conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Charlie', 'Physics', 3.9)"))
-                    
-                    conn.execute(text("INSERT INTO customers (name, email, city) VALUES ('John Doe', 'john@example.com', 'New York')"))
-                    conn.execute(text("INSERT INTO customers (name, email, city) VALUES ('Jane Smith', 'jane@example.com', 'Chennai')"))
-                    
-                    conn.execute(text("INSERT INTO orders (customer_id, total_amount, order_date) VALUES (1, 150.00, '2023-01-10')"))
-                    conn.execute(text("INSERT INTO orders (customer_id, total_amount, order_date) VALUES (2, 85.50, '2023-02-15')"))
-                    conn.commit()
-            except Exception as e:
-                print(f"Seed failed: {e}")
+                # Check if data exists, if not seed it
+                try:
+                    result = conn.execute(text("SELECT COUNT(*) FROM students")).scalar()
+                    if result == 0:
+                        print("Seeding sample database...")
+                        conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Alice', 'CS', 3.8)"))
+                        conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Bob', 'Arts', 3.5)"))
+                        conn.execute(text("INSERT INTO students (name, department, gpa) VALUES ('Charlie', 'Physics', 3.9)"))
+                        
+                        conn.execute(text("INSERT INTO customers (name, email, city) VALUES ('John Doe', 'john@example.com', 'New York')"))
+                        conn.execute(text("INSERT INTO customers (name, email, city) VALUES ('Jane Smith', 'jane@example.com', 'Chennai')"))
+                        
+                        conn.execute(text("INSERT INTO orders (customer_id, total_amount, order_date) VALUES (1, 150.00, '2023-01-10')"))
+                        conn.execute(text("INSERT INTO orders (customer_id, total_amount, order_date) VALUES (2, 85.50, '2023-02-15')"))
+                except Exception as e:
+                    print(f"Seed failed: {e}")
 
 def init_auth_db():
     """Initializes the authentication database."""
     engine = get_auth_engine()
     with engine.connect() as conn:
-        conn.execute(text("""
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE,
-                password_hash TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """))
-        conn.commit()
+        with conn.begin():
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE,
+                    email TEXT UNIQUE,
+                    password_hash TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """))
+            # Migration: Add email column if not exists
+            try:
+                conn.execute(text("ALTER TABLE users ADD COLUMN email TEXT"))
+            except Exception:
+                pass # Already exists or other error
 
 def execute_query(sql_query: str) -> Dict[str, Any]:
     """Executes a raw SQL query and returns results as a list of dicts. SECURITY: Only SELECT queries allowed."""
@@ -237,26 +243,31 @@ def execute_query(sql_query: str) -> Dict[str, Any]:
     except Exception as e:
         return {"error": str(e)}
 
-def get_user(username: str) -> Optional[Dict[str, Any]]:
-    """Retrieves a user by username from the auth database."""
+def get_user(identifier: str) -> Optional[Dict[str, Any]]:
+    """Retrieves a user by username OR email from the auth database."""
     current_engine = get_auth_engine()
     try:
         with current_engine.connect() as conn:
-            result = conn.execute(text("SELECT id, username, password_hash FROM users WHERE username = :u"), {"u": username}).first()
+            # Use mappings() to get dict-like access for compatibility across SQLAlchemy versions
+            query = text("SELECT id, username, password_hash, email FROM users WHERE username = :i OR email = :i")
+            result = conn.execute(query, {"i": identifier}).mappings().first()
+            
             if result:
-                # result is a Row object, convert to dict
-                return {"id": result[0], "username": result[1], "password_hash": result[2]}
+                return dict(result)
             return None
     except Exception as e:
         print(f"Auth Retrieve Error: {e}")
         return None
 
-def create_user(username: str, password_hash: str) -> bool:
+def create_user(username: str, email: str, password_hash: str) -> bool:
     """Creates a new user in the auth database."""
     current_engine = get_auth_engine()
     try:
         with current_engine.connect() as conn:
-            conn.execute(text("INSERT INTO users (username, password_hash) VALUES (:u, :p)"), {"u": username, "p": password_hash})
+            conn.execute(
+                text("INSERT INTO users (username, email, password_hash) VALUES (:u, :e, :p)"), 
+                {"u": username, "e": email, "p": password_hash}
+            )
             conn.commit()
             return True
     except Exception as e:

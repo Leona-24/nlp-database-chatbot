@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import Sidebar from '../components/home/Sidebar';
 import Header from '../components/home/Header';
 import MessageList from '../components/home/MessageList';
@@ -17,47 +18,45 @@ const Home = ({ user, onLogout }: HomeProps) => {
         loading,
         connected,
         setConnected,
-        schema,
         setSchema,
         dbConfig,
         setDbConfig,
         messagesEndRef,
-        sendMessage
+        sendMessage,
+        clearMessages
     } = useChat(onLogout);
 
-    const suggestions = [
-        "Show all students",
-        "How many customers are there?",
-        "List orders with total amount greater than 100",
-        "Show me students with GPA > 3.5",
-        "Show all customers from Chennai",
-        "how many users are there",
-    ];
+    useEffect(() => {
+        const handleKeyDown = (event: KeyboardEvent) => {
+            if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'r') {
+                event.preventDefault();
+                clearMessages();
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [clearMessages]);
 
     return (
-        <div className="min-h-screen bg-slate-50 flex">
+        <div className="h-screen overflow-hidden bg-slate-50 flex">
             <Sidebar
                 connected={connected}
                 dbConfig={dbConfig}
                 setDbConfig={setDbConfig}
                 setConnected={setConnected}
-                schema={schema}
                 setSchema={setSchema}
             />
 
-            <div className="flex-1 flex flex-col">
+            <div className="flex-1 flex flex-col min-h-0">
                 <Header
-                    connected={connected}
                     username={user.username}
-                    dbUsername={dbConfig.username}
                     onLogout={onLogout}
                 />
 
                 <MessageList
                     messages={messages}
                     connected={connected}
-                    suggestions={suggestions}
-                    onSuggestionClick={setInput}
                     messagesEndRef={messagesEndRef}
                 />
 

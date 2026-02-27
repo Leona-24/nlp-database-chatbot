@@ -54,7 +54,7 @@ const Feedback = ({ messageId }: FeedbackProps) => {
     return (
         <div className="mt-4 pt-4 border-t border-slate-100">
             <p className="text-[10px] font-bold text-slate-400 mb-3 uppercase tracking-widest">
-                Was this response good or bad?
+                Was this response helpful?
             </p>
             <div className="flex gap-2 mb-4">
                 <Button
@@ -67,19 +67,19 @@ const Feedback = ({ messageId }: FeedbackProps) => {
                     onClick={() => setStatus('good')}
                 >
                     <ThumbsUp className={cn("w-3 h-3", status === 'good' && "fill-current")} />
-                    <span className="text-xs font-medium">Good</span>
+                    <span className="text-xs font-medium">Yes</span>
                 </Button>
                 <Button
                     variant="outline"
                     size="sm"
                     className={cn(
-                        "h-8 gap-2 px-3 border-slate-200 text-slate-600 transition-all duration-200 hover:border-red-200 hover:bg-red-50/50 hover:text-red-600",
-                        status === 'bad' && "bg-red-50/80 border-red-200 text-red-600 shadow-sm"
+                        "h-8 gap-2 px-3 border-slate-200 text-slate-600 transition-all duration-200 hover:border-amber-200 hover:bg-amber-50/50 hover:text-amber-600",
+                        status === 'bad' && "bg-amber-50/80 border-amber-200 text-amber-600 shadow-sm"
                     )}
                     onClick={() => setStatus('bad')}
                 >
                     <ThumbsDown className={cn("w-3 h-3", status === 'bad' && "fill-current")} />
-                    <span className="text-xs font-medium">Bad</span>
+                    <span className="text-xs font-medium">No</span>
                 </Button>
             </div>
 

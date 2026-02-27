@@ -12,20 +12,16 @@ import config from '../../config/env';
 interface MessageListProps {
     messages: Message[];
     connected: boolean;
-    suggestions: string[];
-    onSuggestionClick: (suggestion: string) => void;
     messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
 
 const MessageList = ({
     messages,
     connected,
-    suggestions,
-    onSuggestionClick,
     messagesEndRef
 }: MessageListProps) => {
     return (
-        <ScrollArea className="flex-1 p-6">
+        <ScrollArea className="flex-1 min-h-0 p-6">
             {messages.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto">
                     <div className="w-20 h-20 bg-gradient-to-br from-purple-100 to-blue-100 rounded-2xl flex items-center justify-center mb-6">
@@ -50,22 +46,6 @@ const MessageList = ({
                             </p>
                         </div>
                     )}
-
-                    <div className="w-full">
-                        <p className="text-sm text-slate-500 mb-3">Try asking:</p>
-                        <div className="flex flex-wrap gap-2 justify-center">
-                            {suggestions.map((suggestion, idx) => (
-                                <button
-                                    key={idx}
-                                    onClick={() => onSuggestionClick(suggestion)}
-                                    className="px-3 py-1.5 bg-white border rounded-full text-sm text-slate-600 hover:border-purple-400 hover:text-purple-600 transition-colors"
-                                    disabled={!connected}
-                                >
-                                    {suggestion}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
                 </div>
             ) : (
                 <div className="space-y-6 max-w-4xl mx-auto">

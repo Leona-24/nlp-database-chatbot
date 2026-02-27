@@ -1,0 +1,4 @@
+timestamp,message_id,status,comment
+2026-02-23T10:17:55.745834,1771841849628,good,
+2026-02-23T10:19:50.134889,1771841940978,bad,"it seem's like duplicate data
+"

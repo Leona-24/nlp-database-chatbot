@@ -1,9 +1,7 @@
 import { Sparkles, Shield } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import SchemaViewer from './SchemaViewer';
 import DatabaseConnectionDialog from './DatabaseConnectionDialog';
 import type { DatabaseConfig } from '../../types';
 
@@ -14,7 +12,6 @@ interface SidebarProps {
     dbConfig: DatabaseConfig;
     setDbConfig: (config: DatabaseConfig) => void;
     setConnected: (connected: boolean) => void;
-    schema: any[];
     setSchema: (schema: any[]) => void;
 }
 
@@ -23,7 +20,6 @@ const Sidebar = ({
     dbConfig,
     setDbConfig,
     setConnected,
-    schema,
     setSchema
 }: SidebarProps) => {
     return (
@@ -63,9 +59,8 @@ const Sidebar = ({
                 </Dialog>
             </div>
 
-            <ScrollArea className="flex-1 p-4">
-                <SchemaViewer schema={schema} />
-            </ScrollArea>
+            {/* Schema viewer removed as per request */}
+            <div className="flex-1" />
 
             <div className="p-4 border-t">
                 <div className="flex items-center gap-2 text-xs text-slate-500">

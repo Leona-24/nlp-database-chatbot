@@ -54,11 +54,13 @@ class QueryResponse(BaseModel):
 
 class UserRegister(BaseModel):
     username: str
+    email: str
     password: str
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    username: str
 
 class FeedbackRequest(BaseModel):
     message_id: str
@@ -105,11 +107,16 @@ def register(user: UserRegister):
 
         existing = get_user(user.username)
         if existing:
-            print(f"REGISTER FAILED: User already exists: {user.username}")
-            raise HTTPException(status_code=400, detail="Username already registered")
+            print(f"REGISTER FAILED: Username already exists: {user.username}")
+            raise HTTPException(status_code=400, detail="Account already exists")
+        
+        existing_email = get_user(user.email)
+        if existing_email:
+            print(f"REGISTER FAILED: Email already exists: {user.email}")
+            raise HTTPException(status_code=400, detail="Account already exists")
         
         hashed_password = get_password_hash(user.password)
-        success = create_user(user.username, hashed_password)
+        success = create_user(user.username, user.email, hashed_password)
         if not success:
             print(f"REGISTER FAILED: Database error for {user.username}")
             raise HTTPException(status_code=500, detail="Could not create user in database")
@@ -135,7 +142,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
     access_token = create_access_token(
         data={"sub": user["username"]}, expires_delta=access_token_expires
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "username": user["username"]}
 
 @app.get("/api/me")
 def read_users_me(token: str = Depends(oauth2_scheme)):

@@ -135,6 +135,11 @@ export const useChat = (onLogout: () => void) => {
         }
     };
 
+    const clearMessages = () => {
+        setMessages([]);
+        toast.success('Chat history cleared');
+    };
+
     return {
         messages,
         input,
@@ -147,6 +152,7 @@ export const useChat = (onLogout: () => void) => {
         dbConfig,
         setDbConfig,
         messagesEndRef,
-        sendMessage
+        sendMessage,
+        clearMessages
     };
 };
