@@ -2,8 +2,12 @@ Write-Host "Starting NLP Chatbot Application..." -ForegroundColor Cyan
 
 # Check for Backend
 Write-Host "Launching Backend (FastAPI)..." -ForegroundColor Green
-# Using python directly to start uvicorn with explicit host binding
-Start-Process -NoNewWindow -FilePath "python" -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory ".\nlp_backend"
+# Detect python path
+$PythonExe = "python"
+if (Test-Path "$PSScriptRoot\.venv\Scripts\python.exe") {
+    $PythonExe = "$PSScriptRoot\.venv\Scripts\python.exe"
+}
+Start-Process -NoNewWindow -FilePath $PythonExe -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port 8000" -WorkingDirectory ".\nlp_backend"
 
 # Wait a moment for backend to initialize
 Write-Host "Waiting for backend to start..." -ForegroundColor Yellow

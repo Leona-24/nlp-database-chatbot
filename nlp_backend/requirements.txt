@@ -3,6 +3,7 @@ uvicorn
 sqlalchemy
 pandas
 passlib[bcrypt]
+bcrypt
 python-jose[cryptography]
 python-multipart
 pymysql
@@ -11,3 +12,6 @@ openai
 python-dotenv
 chromadb
 scikit-learn
+matplotlib
+Pillow
+altair

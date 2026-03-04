@@ -85,7 +85,10 @@ const MessageList = ({
                                 )}
 
                                 {message.results && (
-                                    <ResultsTable result={message.results} />
+                                    <ResultsTable
+                                        result={message.results}
+                                        chartImage={message.chartImage}
+                                    />
                                 )}
 
                                 {message.type === 'bot' && (

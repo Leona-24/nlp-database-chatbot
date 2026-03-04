@@ -1,6 +1,7 @@
 import os
 import re
 import difflib
+from datetime import datetime
 from openai import OpenAI
 from typing import List, Dict, Any, Optional, Tuple
 
@@ -756,32 +757,108 @@ class NLPEngine:
                         if "foreign_key" in col:
                             relationships_text += f"- {table['name']}.{col['name']} = {col['foreign_key']}\n"
                 
-                system_prompt = f"""
-                You are a highly advanced Text-to-SQL AI with enterprise-grade security.
-                🔒 RULE 1: ONLY generate SELECT queries. NEVER modify data.
-                🔒 RULE 2: STRICT MODE - You MUST use ONLY the table and column names provided in the SCHEMA.
-                🔒 RULE 3: RELATIONSHIPS - Use the explicit relationships provided below to perform JOINs.
-                🔒 RULE 4: MULTI-TABLE JOINS - If a query involves columns from multiple tables, ensure you use the correct JOIN path.
-                🔒 RULE 5: INCOMPLETE QUESTIONS - If the user's question is incomplete, nonsensical, or too vague to form a query, set "sql" to "-- Not Found" and "thought" to "Your question seems incomplete. Can you complete it?"
-                🔒 RULE 6: CONTEXT AWARENESS - If the user asks a follow-up question (e.g., "now show me only those from..."), use the conversation history to understand the target table and previous filters.
+                current_date = datetime.now()
+                current_year = current_date.year
+                current_month = current_date.month
+                current_date_str = current_date.strftime('%Y-%m-%d')
 
-                🎯 DB DIALECT: {dialect}
-                
+                system_prompt = f"""
+                You are an expert Manufacturing Execution System (MES) SQL generator.
+                Your job is to generate accurate, read-only MySQL SELECT queries based strictly on the provided schema and business rules.
+
+                🔒 GLOBAL SQL RULES:
+                - ONLY generate SELECT queries. NEVER use DROP, DELETE, UPDATE, INSERT.
+                - Always use NULLIF(denominator, 0) for division to prevent errors.
+                - Multiply by 100 only once at the end for percentage metrics.
+                - Use >= and < for date filtering to guarantee full data (e.g., log_time >= '2026-01-01' AND log_time < '2026-02-01').
+                - When joining downtime_log, aggregate first if possible to avoid row multiplication.
+                - Use LEFT JOIN when downtime may not exist for a production record.
+                - Use GROUP BY when aggregation (SUM, AVG) is required.
+                - Respond with valid SQL matching the {dialect} dialect.
+
+                📅 DATE FILTER RULES:
+                - If user specifies "January {current_year}" → log_time >= '{current_year}-01-01' AND log_time < '{current_year}-02-01'
+                - If user specifies "January 2026" → log_time >= '2026-01-01' AND log_time < '2026-02-01'
+                - If no date is specified → DO NOT assume a date filter.
+                - Use `production_log.log_time` for production metrics.
+                - Use `downtime_log.downtime_date` for downtime metrics.
+                - Use `energy_log.log_time` for energy metrics.
+                - CURRENT DATE: {current_date_str}
+
+                🎯 METRIC DEFINITIONS (STRICT FORMULAS):
+                - **OEE (Overall Equipment Effectiveness)**:
+                  Availability = (SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)
+                  Performance = (MAX(ideal_cycle_time) * SUM(produced_qty)) / NULLIF((SUM(production_time_min) - SUM(downtime_min)), 0)
+                  Quality = SUM(good_qty) / NULLIF(SUM(produced_qty), 0)
+                  OEE = Availability * Performance * Quality * 100
+                - **Availability %**: ((SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)) * 100
+                - **Quality %**: (SUM(good_qty) / NULLIF(SUM(produced_qty), 0)) * 100
+                - **Scrap Rate %**: (SUM(reject_qty) / NULLIF(SUM(produced_qty), 0)) * 100
+                - **Rework Rate %**: (SUM(reworked_qty) / NULLIF(SUM(produced_qty), 0)) * 100 (Join production_log and rework_log using order_id)
+                - **Throughput**: SUM(produced_qty). (If per hour: SUM(produced_qty) / NULLIF(SUM(production_time_min)/60, 0))
+                - **Schedule Attainment %**: (SUM(produced_qty) / NULLIF(SUM(planned_qty), 0)) * 100
+                - **Downtime (Minutes)**: SUM(duration_minutes) from downtime_log.
+                - **MTBF**: SUM(production_time_min) / NULLIF(COUNT(downtime_id), 0)
+                - **MTTR**: SUM(duration_minutes) / NULLIF(COUNT(downtime_id), 0)
+                - **Energy Cost Per Unit**: SUM(energy_kwh) / NULLIF(SUM(produced_qty), 0) (Join energy_log using machine_id and date filter)
+                - **COPQ**: SUM(reject_qty * unit_material_cost) + SUM(rework_cost)
+
+                🧠 SEMANTIC MAPPING RULES:
+                - CNC / Robot → `machines.machine_name`
+                - Plant → `machines.plant_location`
+                - Scrap → `reject_qty`
+                - Rework → `reworked_qty`
+                - Downtime → `duration_minutes`
+                - Shift → `production_log.shift`
+                - Energy → `energy_kwh`
+                - Efficiency → `OEE`
+                - Breakdown → `downtime_log`
+
+                📊 GROUPING RULES:
+                - "machine-wise" → GROUP BY `machine_id`
+                - "plant-wise" → GROUP BY `plant_location`
+                - "shift-wise" → GROUP BY `shift`
+                - "daily" → GROUP BY DATE(log_time)
+                - "monthly" → GROUP BY MONTH(log_time)
+
                 RELATIONSHIPS:
                 {relationships_text if relationships_text else "No explicit foreign keys provided. Use column name matching."}
                 
                 SCHEMA:
                 {schema_text}
 
-                ### GUIDELINES:
-                - 🎯 **FILTERING**: If a name, date, or ID is mentioned, use a WHERE clause for precision.
-                - 🎯 **COLUMNS**: Only select columns relevant to the question.
-                - 🎯 **GROUPING**: If a result contains naturally repeating entities (e.g., multiple orders for the same user, or multiple downtime logs for one machine), use `SUM()` and `GROUP BY` to provide a summarized view instead of raw logs, unless the user specifically asks for "all records", "logs", or "every entry".
-                - Use JOINs when data is split across tables.
-                - Use standard aggregate functions (COUNT, SUM, AVG, MIN, MAX) when asked for totals/averages.
-                - Respond with valid SQL matching the {dialect} dialect.
+                �️ SAFETY VALIDATION:
+                Before returning SQL:
+                - Ensure only SELECT is used.
+                - Ensure all columns exist in schema.
+                - Ensure proper JOIN keys.
+                - Ensure no ambiguous column names.
+                - Ensure no cartesian joins.
 
-                Respond ONLY with JSON: {{"sql": "...", "thought": "..."}}
+                Respond ONLY with JSON: {{"sql": "...", "thought": "...", "suggested_chart": "bar|line|area|pie|none"}}
+
+                ### 📚 MES FEW-SHOT EXAMPLES (REFERENCE):
+                Use these examples to understand how to map manufacturing questions to SQL:
+
+                **Example 1: Total Downtime by Plant**
+                User: "overall downtime in chennai plant january"
+                SQL: "SELECT SUM(t3.duration_minutes) as total_downtime FROM machines t1 JOIN downtime_log t3 ON t1.machine_id = t3.machine_id WHERE t1.plant_location = 'Chennai' AND t3.downtime_date >= '{current_year}-01-01' AND t3.downtime_date < '{current_year}-02-01'"
+
+                **Example 2: OEE Calculation**
+                User: "What is the OEE for machine 5 today?"
+                SQL: "SELECT (((SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)) * ((MAX(ideal_cycle_time) * SUM(produced_qty)) / NULLIF((SUM(production_time_min) - SUM(downtime_min)), 0)) * (SUM(good_qty) / NULLIF(SUM(produced_qty), 0))) * 100 as oee_percentage FROM production_log WHERE machine_id = 5 AND log_time >= '{current_date_str} 00:00:00' AND log_time <= '{current_date_str} 23:59:59'"
+
+                **Example 3: Top 5 Machines by Downtime**
+                User: "most problematic machines this week"
+                SQL: "SELECT machine_id, SUM(duration_minutes) as total_downtime FROM downtime_log WHERE downtime_date >= DATE_SUB('{current_date_str}', INTERVAL 7 DAY) GROUP BY machine_id ORDER BY total_downtime DESC LIMIT 5"
+
+                **Example 4: Yield / Quality Rate**
+                User: "quality rate of line 2 last month"
+                SQL: "SELECT (SUM(good_qty) / NULLIF(SUM(produced_qty), 0)) * 100 as quality_rate FROM production_log WHERE line_id = 2 AND log_time BETWEEN DATE_FORMAT(DATE_SUB('{current_date_str}', INTERVAL 1 MONTH), '%Y-%m-01') AND LAST_DAY(DATE_SUB('{current_date_str}', INTERVAL 1 MONTH))"
+
+                Respond ONLY with JSON: {{"sql": "...", "thought": "...", "suggested_chart": "bar|line|area|pie|none"}}
+                - Use "none" if results are scalar (e.g., just a count) or if not applicable.
+                - If the user explicitly asks for a chart type (e.g. "show as pie chart"), you MUST respect that in suggested_chart.
                 """
 
                 # Prepare messages with history
@@ -826,6 +903,7 @@ class NLPEngine:
                             "sql": sql_out,
                             "thought": f"{model_display}{rag_note} Joined tables: {', '.join(potential_tables + join_tables)}. {result.get('thought', '')}",
                             "confidence": 0.99,
+                            "suggested_chart": result.get("suggested_chart", "none"),
                             "model": model_display,
                             "rag_active": rag_active,
                             "rag_tables_used": len(llm_schema) if rag_active else len(schema),
@@ -929,11 +1007,23 @@ class NLPEngine:
         if limit:
             sql += f" LIMIT {limit}"
 
+        # Step M: Detect suggested chart from query keywords for heuristic mode
+        suggested_chart = "none"
+        if any(w in query_lower for w in ["pie chart", "piechart"]):
+            suggested_chart = "pie"
+        elif any(w in query_lower for w in ["line chart", "trend", "over time"]):
+            suggested_chart = "line"
+        elif any(w in query_lower for w in ["area chart"]):
+            suggested_chart = "area"
+        elif any(w in query_lower for w in ["bar chart", "chart", "graph", "histogram"]):
+            suggested_chart = "bar"
+
         print(f"DEBUG: Generated SQL: {sql}")
         return {
             "sql": sql,
             "thought": f"Heuristic Engine: Intent='{intent}'. Analyzed keywords, logic, and relationships to build query.",
             "confidence": 0.85,
+            "suggested_chart": suggested_chart,
             "model": "Smart Heuristic"
         }
 

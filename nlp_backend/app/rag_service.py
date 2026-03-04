@@ -157,8 +157,17 @@ class RAGSchemaService:
             "sellers": "sellers vendors suppliers merchants seller vendor",
             "invoices": "invoices bills receipts payments invoice bill receipt",
             "payments": "payments transactions money billing payment paid pay",
-            "inventory": "inventory stock warehouse supply available quantity",
+            "inventory": "inventory stock warehouse supply available quantity material components",
             "users_info": "user details profiles information locations addresses user info detail location city address",
+            
+            # MES & Manufacturing Specific Table Hints
+            "machines": "machines equipment assets devices tools machinery cnc robot printer lathe mill",
+            "downtime_log": "downtime offline stops failures maintenance repair breakdown stopped down broken",
+            "production_lines": "production lines assembly factory floor manufacturing routing work cell",
+            "plants": "plants facilities factories locations sites buildings",
+            "shifts": "shifts day night working hours schedule labor personnel roster",
+            "defects": "defects scraps scrap quality rejects bad rejected failed damaged",
+            "work_orders": "work orders jobs production planning routing mes tasks",
         }
 
         if name_lower in hint_map:
@@ -173,12 +182,20 @@ class RAGSchemaService:
             hints.append("pricing costs financial monetary money value price amount total")
         if "gpa" in col_names or "grade" in col_names or "score" in col_names:
             hints.append("academic performance grades scores gpa score grade")
-        if "date" in col_names or "created_at" in col_names or "order_date" in col_names:
-            hints.append("temporal dates time when date created recently")
+        if "date" in col_names or "created_at" in col_names or "order_date" in col_names or "timestamp" in col_names:
+            hints.append("temporal dates time when date created recently timestamp")
         if "name" in col_names or "username" in col_names:
             hints.append("named entities identifying people things name called who")
-        if "quantity" in col_names or "count" in col_names:
-            hints.append("quantity count how many number amount")
+        if "quantity" in col_names or "count" in col_names or "actual_output" in col_names or "target_output" in col_names:
+            hints.append("quantity count how many number amount production output pieces parts units")
+            
+        # MES / OEE Specific Column Hints
+        if "duration" in col_names or "downtime" in col_names:
+            hints.append("downtime offline duration time minutes hours availability stops oee")
+        if "defect" in col_names or "scrap" in col_names or "good_output" in col_names:
+            hints.append("quality defects scrap rejects yield oee bad parts good parts")
+        if "cycle_time" in col_names or "ideal_cycle" in col_names:
+            hints.append("performance speed rate cycle time oee throughput")
 
         return " ".join(hints)
 

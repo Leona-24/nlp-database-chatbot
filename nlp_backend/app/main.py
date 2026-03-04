@@ -13,6 +13,7 @@ import os
 from .database import execute_query, init_db, init_auth_db, get_user, create_user
 from .nlp_service import nlp_engine
 from .rag_service import rag_service
+from .visualization_service import generate_chart
 
 print("\n" + "="*50)
 print("SERVER IS STARTING WITH LATEST AUTH CODE")
@@ -51,6 +52,8 @@ class QueryResponse(BaseModel):
     message: str = "Success"
     thought: Optional[str] = None
     confidence: float = 0.0
+    chart_image: Optional[str] = None  # base64-encoded PNG from Matplotlib
+    chart_spec: Optional[Dict[str, Any]] = None  # Vega-Lite JSON spec
 
 class UserRegister(BaseModel):
     username: str
@@ -264,6 +267,8 @@ def handle_query(request: QueryRequest):
             dialect=dialect, 
             history=request.history
         )
+        suggested_chart = nlp_response.get("suggested_chart", "none")
+
         sql_query = nlp_response["sql"]
         thought = nlp_response["thought"]
 
@@ -291,14 +296,25 @@ def handle_query(request: QueryRequest):
             
         columns = execution_result["columns"]
         data = execution_result["data"]
-        
+
+        # Generate chart from results
+        # Now returns both a static PNG and an interactive spec
+        chart_image, chart_spec = generate_chart(
+             columns=columns,
+             data=data,
+             query=request.query,
+             chart_type=suggested_chart if suggested_chart != "none" else None
+        )
+
         return {
             "sql_query": sql_query,
             "results": data,
             "message": f"Found {len(data)} results.",
             "thought": thought,
             "confidence": nlp_response.get("confidence", 0),
-            "execution_time": execution_result.get("execution_time", 0.1)
+            "execution_time": execution_result.get("execution_time", 0.1),
+            "chart_image": chart_image,
+            "chart_spec": chart_spec,
         }
         
     except Exception as e:

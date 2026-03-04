@@ -107,6 +107,8 @@ export const useChat = (onLogout: () => void) => {
                     executionTime: data.execution_time || 0.1,
                     rowCount: rows.length
                 },
+                chartImage: data.chart_image || undefined,
+                chartSpec: data.chart_spec || undefined,
                 thought: data.thought,
                 confidence: data.confidence,
                 processingSteps: steps.length > 0 ? steps : [
@@ -116,6 +118,7 @@ export const useChat = (onLogout: () => void) => {
                 ],
                 timestamp: new Date()
             };
+
 
             setMessages(prev => [...prev, botMessage]);
 
