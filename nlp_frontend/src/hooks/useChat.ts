@@ -96,10 +96,46 @@ export const useChat = (onLogout: () => void) => {
                 details: s
             }));
 
+            // Never show LLM "thought" explanations as bot content
+            let botContent = data.message || `Found ${rows.length} results.`;
+
+            // Generate a better natural language answer for single value results
+            if (rows.length === 1 && columns.length === 1) {
+                let val = rows[0][0];
+                const colLower = columns[0].toLowerCase();
+                if (typeof val === 'number') {
+                    if (colLower.includes('oee') || colLower.includes('%') || colLower.includes('rate') || colLower.includes('percentage') || colLower.includes('availability') || colLower.includes('quality')) {
+                        val = `${val.toFixed(2)}%`;
+                    } else if (!Number.isInteger(val)) {
+                        val = val.toFixed(2);
+                    }
+                }
+                botContent = `**${columns[0].replace(/_/g, ' ')}** is **${val}**.`;
+            } else if (rows.length === 1 && columns.length > 1) {
+                // Single row, multiple columns - show as key-value pairs
+                const parts = columns.map((col, i) => {
+                    let val = rows[0][i];
+                    const colLower = col.toLowerCase();
+                    if (typeof val === 'number' && !Number.isInteger(val)) {
+                        if (colLower.includes('oee') || colLower.includes('%') || colLower.includes('rate') || colLower.includes('percentage') || colLower.includes('availability') || colLower.includes('quality')) {
+                            val = `${val.toFixed(2)}%`;
+                        } else {
+                            val = val.toFixed(2);
+                        }
+                    }
+                    return `**${col.replace(/_/g, ' ')}**: ${val}`;
+                });
+                botContent = parts.join(' | ');
+            } else if (rows.length === 0) {
+                botContent = data.message || 'No results found for this query.';
+            } else {
+                botContent = `Found **${rows.length}** results.`;
+            }
+
             const botMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 type: 'bot',
-                content: data.thought?.split('. ')[0] || data.message || `Found ${rows.length} results.`,
+                content: botContent,
                 sql: data.sql_query,
                 results: {
                     columns,
@@ -118,7 +154,6 @@ export const useChat = (onLogout: () => void) => {
                 ],
                 timestamp: new Date()
             };
-
 
             setMessages(prev => [...prev, botMessage]);
 

@@ -6,12 +6,12 @@ from openai import OpenAI
 from typing import List, Dict, Any, Optional, Tuple
 
 # RAG Service for schema retrieval
-from .rag_service import rag_service
+from .rag import rag_service
 
 from dotenv import load_dotenv
 
 # Load environment variables from .env file
-load_dotenv(os.path.join(os.path.dirname(__file__), '../../.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), '../../../.env'))
 
 # --- CONFIGURATION (Loaded from Environment) ---
 API_KEY = os.getenv("LLM_API_KEY")
@@ -109,6 +109,69 @@ class NLPEngine:
             return False, "🚫 Security Error: Only SELECT queries are allowed. No data modifications permitted."
 
         return True, ""
+
+    # ──────────────────────────────
+    # COLUMN VALIDATION
+    # ──────────────────────────────
+    def _validate_sql_columns(self, sql: str, schema: List[Dict[str, Any]]) -> Tuple[bool, str, List[str]]:
+        """Validates that all table.column references in the SQL actually exist in the schema.
+        Returns (is_valid, error_message, list_of_bad_refs)."""
+        # Build a lookup: table_name_lower -> set of column_names_lower
+        schema_lookup = {}
+        for t in schema:
+            cols = {c["name"].lower() for c in t["columns"]}
+            schema_lookup[t["name"].lower()] = cols
+
+        # Remove string literals and comments to avoid false positives
+        clean_sql = re.sub(r"'[^']*'", "''", sql)  # remove string values
+        clean_sql = re.sub(r"--.*", "", clean_sql)   # remove comments
+        clean_sql = re.sub(r'[`"\[\]]', '', clean_sql)  # remove quotes
+
+        # Extract alias -> table mapping from FROM/JOIN clauses
+        # Pattern: table_name alias  or  table_name AS alias
+        alias_map = {}  # alias_lower -> table_name_lower
+        # Match: FROM table_name alias, JOIN table_name alias, FROM table_name AS alias
+        alias_patterns = re.findall(
+            r'(?:FROM|JOIN)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s+(?:AS\s+)?([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+ON|\s+WHERE|\s+LEFT|\s+RIGHT|\s+INNER|\s+OUTER|\s+CROSS|\s+JOIN|\s+GROUP|\s+ORDER|\s+LIMIT|\s*$|\s*,)',
+            clean_sql,
+            re.IGNORECASE
+        )
+        for table_name, alias in alias_patterns:
+            tn = table_name.lower()
+            al = alias.lower()
+            # Skip if the "alias" is actually a SQL keyword
+            sql_keywords = {'on', 'where', 'left', 'right', 'inner', 'outer', 'cross', 'join',
+                           'group', 'order', 'having', 'limit', 'union', 'select', 'and', 'or'}
+            if al not in sql_keywords and tn in schema_lookup:
+                alias_map[al] = tn
+            # Also map full table name to itself
+            if tn in schema_lookup:
+                alias_map[tn] = tn
+
+        # Extract all alias.column references
+        col_refs = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\.([a-zA-Z_][a-zA-Z0-9_]*)\b', clean_sql)
+        
+        bad_refs = []
+        for table_or_alias, col_name in col_refs:
+            ta_lower = table_or_alias.lower()
+            cn_lower = col_name.lower()
+            
+            # Resolve alias to actual table name
+            actual_table = alias_map.get(ta_lower)
+            if actual_table is None:
+                continue  # Unknown alias, skip (might be a subquery alias)
+            
+            # Check if the column exists in this table
+            if actual_table in schema_lookup:
+                if cn_lower not in schema_lookup[actual_table]:
+                    # Build helpful error message
+                    valid_cols = sorted(schema_lookup[actual_table])
+                    bad_refs.append(f"{table_or_alias}.{col_name} (table '{actual_table}' has columns: {', '.join(valid_cols)})")
+
+        if bad_refs:
+            return False, f"Invalid column references: {'; '.join(bad_refs)}", bad_refs
+        
+        return True, "", []
 
     # ──────────────────────────────
     # TYPO CORRECTION
@@ -708,6 +771,143 @@ class NLPEngine:
         return "*"
 
     # ──────────────────────────────────────────────────────
+    # SMART SCHEMA ANALYZER FOR MES
+    # ──────────────────────────────────────────────────────
+    def _analyze_mes_schema(self, schema: List[Dict[str, Any]]) -> str:
+        """
+        Analyzes the actual database schema to auto-detect MES-relevant columns.
+        Returns a text block that tells the LLM which actual columns to use.
+        """
+        hints = []
+        
+        # Define patterns to detect MES-relevant columns
+        time_patterns = {
+            'production_time': ['production_time', 'planned_time', 'operating_time', 'run_time', 'runtime', 'prod_time', 'total_time', 'available_time'],
+            'downtime': ['downtime', 'down_time', 'breakdown', 'idle_time', 'stop_time', 'stoppage'],
+            'units_produced': ['units_produced', 'produced_qty', 'output_qty', 'quantity_produced', 'total_produced', 'production_qty', 'good_count', 'output_count', 'total_output'],
+            'defects': ['defects', 'defect', 'reject_qty', 'rejects', 'defective', 'scrap', 'bad_qty', 'reject_count', 'scrap_qty', 'bad_count', 'ng_count'],
+            'good_qty': ['good_qty', 'good_count', 'ok_qty', 'pass_qty', 'passed_count'],
+            'machine_id': ['machine_id', 'equipment_id', 'asset_id', 'machine_no', 'equipment_no'],
+            'date_col': ['production_date', 'log_time', 'timestamp', 'date', 'created_at', 'record_date', 'work_date', 'shift_date', 'log_date'],
+            'shift': ['shift', 'shift_id', 'shift_name', 'shift_no'],
+            'machine_name': ['machine_name', 'equipment_name', 'asset_name'],
+        }
+        
+        # Time unit detection patterns
+        time_unit_hints = {
+            'hours': ['_hours', '_hrs', '_hr'],
+            'minutes': ['_min', '_minutes', '_mins'],
+            'seconds': ['_seconds', '_sec', '_secs'],
+            'milliseconds': ['_ms', '_milliseconds', '_millis'],
+        }
+        
+        found = {}  # category -> [(table, column, time_unit)]
+        
+        for table in schema:
+            table_name = table['name']
+            for col in table['columns']:
+                col_name = col['name'].lower()
+                col_name_full = col['name']
+                
+                for category, patterns in time_patterns.items():
+                    for pattern in patterns:
+                        if pattern in col_name:
+                            # Detect time unit if this is a time-related column
+                            time_unit = None
+                            if category in ['production_time', 'downtime']:
+                                for unit, suffixes in time_unit_hints.items():
+                                    for suffix in suffixes:
+                                        if suffix in col_name:
+                                            time_unit = unit
+                                            break
+                                    if time_unit:
+                                        break
+                                if not time_unit:
+                                    # Check the column type for hints
+                                    col_type = str(col.get('type', '')).lower()
+                                    if 'time' in col_type or 'interval' in col_type:
+                                        time_unit = 'unknown'
+                                    else:
+                                        time_unit = 'unknown (check data)'
+                            
+                            if category not in found:
+                                found[category] = []
+                            found[category].append((table_name, col_name_full, time_unit))
+                            break
+        
+        # Build hints text
+        if found:
+            hints.append("📋 SCHEMA ANALYSIS HINTS (auto-detected from your database):")
+            
+            if 'production_time' in found:
+                for table, col, unit in found['production_time']:
+                    unit_note = f" (unit: {unit})" if unit else ""
+                    hints.append(f"  - Production Time: `{table}`.`{col}`{unit_note}")
+            
+            if 'downtime' in found:
+                for table, col, unit in found['downtime']:
+                    unit_note = f" (unit: {unit})" if unit else ""
+                    hints.append(f"  - Downtime: `{table}`.`{col}`{unit_note}")
+            
+            if 'units_produced' in found:
+                for table, col, _ in found['units_produced']:
+                    hints.append(f"  - Units Produced: `{table}`.`{col}`")
+            
+            if 'defects' in found:
+                for table, col, _ in found['defects']:
+                    hints.append(f"  - Defects/Scrap: `{table}`.`{col}`")
+            
+            if 'good_qty' in found:
+                for table, col, _ in found['good_qty']:
+                    hints.append(f"  - Good Quantity: `{table}`.`{col}`")
+            
+            if 'machine_id' in found:
+                for table, col, _ in found['machine_id']:
+                    hints.append(f"  - Machine ID: `{table}`.`{col}`")
+            
+            if 'machine_name' in found:
+                for table, col, _ in found['machine_name']:
+                    hints.append(f"  - Machine Name: `{table}`.`{col}`")
+            
+            if 'date_col' in found:
+                for table, col, _ in found['date_col']:
+                    hints.append(f"  - Date Column: `{table}`.`{col}`")
+            
+            if 'shift' in found:
+                for table, col, _ in found['shift']:
+                    hints.append(f"  - Shift: `{table}`.`{col}`")
+            
+            # Add time unit conversion warnings
+            prod_times = found.get('production_time', [])
+            downtimes = found.get('downtime', [])
+            if prod_times and downtimes:
+                prod_unit = prod_times[0][2]
+                down_unit = downtimes[0][2]
+                if prod_unit and down_unit and prod_unit != down_unit and prod_unit != 'unknown' and down_unit != 'unknown':
+                    hints.append(f"  ⚠️ TIME UNIT MISMATCH: Production time is in {prod_unit} but downtime is in {down_unit}.")
+                    hints.append(f"     You MUST convert them to the same unit before calculating Availability or OEE.")
+                    if prod_unit == 'hours' and down_unit == 'minutes':
+                        hints.append(f"     Convert downtime to hours: `{downtimes[0][1]}` / 60")
+                    elif prod_unit == 'minutes' and down_unit == 'hours':
+                        hints.append(f"     Convert downtime to minutes: `{downtimes[0][1]}` * 60")
+            
+            # Detect join keys
+            hints.append("  🔗 Detected JOIN keys:")
+            all_columns = {}
+            for table in schema:
+                for col in table['columns']:
+                    col_lower = col['name'].lower()
+                    if col_lower not in all_columns:
+                        all_columns[col_lower] = []
+                    all_columns[col_lower].append(table['name'])
+            
+            for col_name, tables in all_columns.items():
+                if len(tables) > 1 and ('_id' in col_name or col_name == 'id'):
+                    hints.append(f"    - `{col_name}` appears in: {', '.join(tables)}")
+        
+        return "\n                ".join(hints) if hints else "No specific MES column patterns detected. Analyze the SCHEMA section to determine correct columns."
+
+    # ──────────────────────────────────────────────────────
     # MAIN ENTRY: generate_sql
     # ──────────────────────────────────────────────────────
     def generate_sql(self, natural_query: str, schema: List[Dict[str, Any]] = None, dialect: str = "sqlite", history: List[Dict[str, str]] = None) -> Dict[str, Any]:
@@ -762,101 +962,128 @@ class NLPEngine:
                 current_month = current_date.month
                 current_date_str = current_date.strftime('%Y-%m-%d')
 
+                # ── SMART SCHEMA ANALYSIS: Auto-detect MES columns ──
+                schema_analysis = self._analyze_mes_schema(llm_schema)
+
                 system_prompt = f"""
                 You are an expert Manufacturing Execution System (MES) SQL generator.
-                Your job is to generate accurate, read-only MySQL SELECT queries based strictly on the provided schema and business rules.
+                Your job is to generate accurate, read-only SELECT queries based STRICTLY on the provided SCHEMA below.
+                
+                🚨 ABSOLUTE RULE: ONLY use table names and column names that appear in the SCHEMA section below.
+                NEVER invent, assume, or hallucinate table/column names. If a column doesn't exist, DO NOT use it.
+
+                🚨 CRITICAL RESPONSE RULES:
+                - Respond ONLY with JSON: {{"sql": "...", "thought": "brief technical note", "suggested_chart": "bar|line|area|pie|none"}}
+                - The "thought" field must be SHORT (max 1 sentence). Do NOT write explanations or paragraphs.
+                - Example good thought: "Joined production and maintenance tables for OEE."
+                - Example bad thought: "To calculate OEE, we need to join the production table..."
 
                 🔒 GLOBAL SQL RULES:
                 - ONLY generate SELECT queries. NEVER use DROP, DELETE, UPDATE, INSERT.
                 - Always use NULLIF(denominator, 0) for division to prevent errors.
+                - Use COALESCE(value, 0) for columns that may be NULL (especially from LEFT JOINs).
                 - Multiply by 100 only once at the end for percentage metrics.
-                - Use >= and < for date filtering to guarantee full data (e.g., log_time >= '2026-01-01' AND log_time < '2026-02-01').
-                - When joining downtime_log, aggregate first if possible to avoid row multiplication.
-                - Use LEFT JOIN when downtime may not exist for a production record.
-                - Use GROUP BY when aggregation (SUM, AVG) is required.
+                - Use >= and < for date filtering (e.g., date_col >= '2026-01-01' AND date_col < '2026-02-01').
+                - Use LEFT JOIN when related data may not exist for every record.
+                - Use GROUP BY when aggregation (SUM, AVG, COUNT) is required.
                 - Respond with valid SQL matching the {dialect} dialect.
+                - Use table aliases (e.g., p, m, mc) to avoid ambiguous column names.
+
+                🧮 OPERATOR RULE (CRITICAL):
+                1. Perform all division operations first, wrapped in parentheses.
+                2. After division is completed, apply multiplication.
+                3. Never rely on default SQL left-to-right behavior.
+
+                🔢 PERCENTAGE CALCULATION PROTOCOL:
+                ROUND((numerator / NULLIF(denominator,0)) * 100, 2)
+                - Division MUST happen first inside parentheses. Multiply * 100 last.
+                - Never Sum Percentages. Always calculate from aggregated raw data.
+                - Every division MUST use NULLIF(denominator,0).
+
+                ⏱️ TIME UNIT HANDLING:
+                - Time columns may store values in hours, minutes, seconds, or milliseconds.
+                - Check the column name for hints: '_hours', '_min', '_minutes', '_seconds', '_ms', '_milliseconds'.
+                - When comparing or combining time values from different columns, normalize to the SAME unit.
+                - If column name contains 'hours' → value is in hours.
+                - If column name contains 'min' or 'minutes' → value is in minutes.
+                - If column name contains 'seconds' → divide by 60 to get minutes, divide by 3600 to get hours.
+                - If column name contains 'ms' or 'milliseconds' → divide by 60000 to get minutes.
+                - When calculating ratios (like Availability), both numerator and denominator must be in the SAME unit — no conversion needed if they come from the same unit.
 
                 📅 DATE FILTER RULES:
-                - If user specifies "January {current_year}" → log_time >= '{current_year}-01-01' AND log_time < '{current_year}-02-01'
-                - If user specifies "January 2026" → log_time >= '2026-01-01' AND log_time < '2026-02-01'
+                - Look at the SCHEMA to find the correct date/datetime column (it could be named: production_date, log_time, timestamp, date, created_at, etc.)
+                - If user says "January" without a year → use {current_year}: date_col >= '{current_year}-01-01' AND date_col < '{current_year}-02-01'
+                - If user says "February" → date_col >= '{current_year}-02-01' AND date_col < '{current_year}-03-01'
+                - If user asks for multiple months (e.g., "January and February"), combine the date ranges using OR wrapped in parentheses: ((date_col >= '{current_year}-01-01' AND date_col < '{current_year}-02-01') OR (date_col >= '{current_year}-02-01' AND date_col < '{current_year}-03-01')). NEVER use AND between two different date ranges for the same column.
+                - If user says "January 2026" → date_col >= '2026-01-01' AND date_col < '2026-02-01'
+                - If user says "this month" → use {current_year}-{current_month:02d}-01 as start
+                - If user says "last month" → calculate previous month
                 - If no date is specified → DO NOT assume a date filter.
-                - Use `production_log.log_time` for production metrics.
-                - Use `downtime_log.downtime_date` for downtime metrics.
-                - Use `energy_log.log_time` for energy metrics.
                 - CURRENT DATE: {current_date_str}
 
-                🎯 METRIC DEFINITIONS (STRICT FORMULAS):
-                - **OEE (Overall Equipment Effectiveness)**:
-                  Availability = (SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)
-                  Performance = (MAX(ideal_cycle_time) * SUM(produced_qty)) / NULLIF((SUM(production_time_min) - SUM(downtime_min)), 0)
-                  Quality = SUM(good_qty) / NULLIF(SUM(produced_qty), 0)
-                  OEE = Availability * Performance * Quality * 100
-                - **Availability %**: ((SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)) * 100
-                - **Quality %**: (SUM(good_qty) / NULLIF(SUM(produced_qty), 0)) * 100
-                - **Scrap Rate %**: (SUM(reject_qty) / NULLIF(SUM(produced_qty), 0)) * 100
-                - **Rework Rate %**: (SUM(reworked_qty) / NULLIF(SUM(produced_qty), 0)) * 100 (Join production_log and rework_log using order_id)
-                - **Throughput**: SUM(produced_qty). (If per hour: SUM(produced_qty) / NULLIF(SUM(production_time_min)/60, 0))
-                - **Schedule Attainment %**: (SUM(produced_qty) / NULLIF(SUM(planned_qty), 0)) * 100
-                - **Downtime (Minutes)**: SUM(duration_minutes) from downtime_log.
-                - **MTBF**: SUM(production_time_min) / NULLIF(COUNT(downtime_id), 0)
-                - **MTTR**: SUM(duration_minutes) / NULLIF(COUNT(downtime_id), 0)
-                - **Energy Cost Per Unit**: SUM(energy_kwh) / NULLIF(SUM(produced_qty), 0) (Join energy_log using machine_id and date filter)
-                - **COPQ**: SUM(reject_qty * unit_material_cost) + SUM(rework_cost)
+                🎯 MES METRIC FORMULAS (adapt column names from SCHEMA below):
+                Study the SCHEMA carefully. Identify which columns represent:
+                - **Production/planned time**: columns with names like 'production_time', 'planned_time', 'operating_time', 'run_time'
+                - **Downtime**: columns with names like 'downtime', 'breakdown', 'idle_time' (may be in a separate table)
+                - **Units produced**: columns like 'units_produced', 'produced_qty', 'output_qty', 'quantity'
+                - **Defects/rejects**: columns like 'defects', 'reject_qty', 'defective', 'scrap', 'bad_qty'
+                - **Good units**: if column exists, use it. Otherwise: units_produced - defects
+                - **Machine ID**: columns like 'machine_id', 'equipment_id', 'asset_id'
+                - **Date/Time**: columns like 'production_date', 'log_time', 'timestamp', 'date'
 
-                🧠 SEMANTIC MAPPING RULES:
-                - CNC / Robot → `machines.machine_name`
-                - Plant → `machines.plant_location`
-                - Scrap → `reject_qty`
-                - Rework → `reworked_qty`
-                - Downtime → `duration_minutes`
-                - Shift → `production_log.shift`
-                - Energy → `energy_kwh`
-                - Efficiency → `OEE`
-                - Breakdown → `downtime_log`
+                Then apply these formulas using the ACTUAL column names from the schema:
 
-                📊 GROUPING RULES:
-                - "machine-wise" → GROUP BY `machine_id`
-                - "plant-wise" → GROUP BY `plant_location`
-                - "shift-wise" → GROUP BY `shift`
-                - "daily" → GROUP BY DATE(log_time)
-                - "monthly" → GROUP BY MONTH(log_time)
+                - **Availability %**: ROUND(((SUM(production_time) - COALESCE(SUM(downtime),0)) / NULLIF(SUM(production_time),0)) * 100, 2)
+                  → If downtime is in a different table, use LEFT JOIN.
+
+                - **Quality %**: ROUND(((SUM(units_produced) - COALESCE(SUM(defects),0)) / NULLIF(SUM(units_produced),0)) * 100, 2)
+                  → If a 'good_qty' column exists, use: ROUND((SUM(good_qty) / NULLIF(SUM(units_produced),0)) * 100, 2)
+
+                - **OEE % = Availability × Quality / 100**:
+                  ROUND(
+                    ((SUM(production_time) - COALESCE(SUM(downtime),0)) / NULLIF(SUM(production_time),0))
+                    * ((SUM(units_produced) - COALESCE(SUM(defects),0)) / NULLIF(SUM(units_produced),0))
+                    * 100, 2
+                  ) AS oee_percentage
+
+                - **Defect/Scrap Rate %**: ROUND((COALESCE(SUM(defects),0) / NULLIF(SUM(units_produced),0)) * 100, 2)
+
+                - **Throughput**: SUM(units_produced) or SUM(units_produced) / NULLIF(SUM(time), 0) for per-hour
+
+                - **MTBF**: SUM(production_time) / NULLIF(COUNT(downtime_events), 0)
+
+                - **MTTR**: SUM(downtime) / NULLIF(COUNT(downtime_events), 0)
+
+                🧠 SEMANTIC MAPPING:
+                - "machine X" or "machine_id X" → WHERE machine_id_column = X
+                - "machine-wise" → GROUP BY machine_id_column
+                - "shift-wise" → GROUP BY shift_column
+                - "daily" → GROUP BY date_column
+                - "monthly" → GROUP BY MONTH(date_column), YEAR(date_column)
+                - "product-wise" → GROUP BY product_id_column
+                - Scrap / defects / rejects → defect/reject column
+                - Downtime / breakdown → downtime column (may be in separate table)
+                - Efficiency → OEE
+                - "CNC" / "Robot" → machine name filter
+
+                {schema_analysis}
 
                 RELATIONSHIPS:
-                {relationships_text if relationships_text else "No explicit foreign keys provided. Use column name matching."}
+                {relationships_text if relationships_text else "No explicit foreign keys. Use column name matching (e.g., machine_id appears in multiple tables)."}
                 
-                SCHEMA:
+                SCHEMA (USE ONLY THESE TABLES AND COLUMNS):
                 {schema_text}
 
-                �️ SAFETY VALIDATION:
+                SAFETY VALIDATION:
                 Before returning SQL:
                 - Ensure only SELECT is used.
-                - Ensure all columns exist in schema.
-                - Ensure proper JOIN keys.
-                - Ensure no ambiguous column names.
+                - Ensure ALL table and column names in the SQL exist in the SCHEMA above.
+                - Ensure proper JOIN keys (match column names across tables).
+                - Ensure no ambiguous column names (use table aliases).
                 - Ensure no cartesian joins.
+                - Double check: does the table ACTUALLY have that column? Re-read the SCHEMA.
 
-                Respond ONLY with JSON: {{"sql": "...", "thought": "...", "suggested_chart": "bar|line|area|pie|none"}}
-
-                ### 📚 MES FEW-SHOT EXAMPLES (REFERENCE):
-                Use these examples to understand how to map manufacturing questions to SQL:
-
-                **Example 1: Total Downtime by Plant**
-                User: "overall downtime in chennai plant january"
-                SQL: "SELECT SUM(t3.duration_minutes) as total_downtime FROM machines t1 JOIN downtime_log t3 ON t1.machine_id = t3.machine_id WHERE t1.plant_location = 'Chennai' AND t3.downtime_date >= '{current_year}-01-01' AND t3.downtime_date < '{current_year}-02-01'"
-
-                **Example 2: OEE Calculation**
-                User: "What is the OEE for machine 5 today?"
-                SQL: "SELECT (((SUM(production_time_min) - SUM(downtime_min)) / NULLIF(SUM(production_time_min), 0)) * ((MAX(ideal_cycle_time) * SUM(produced_qty)) / NULLIF((SUM(production_time_min) - SUM(downtime_min)), 0)) * (SUM(good_qty) / NULLIF(SUM(produced_qty), 0))) * 100 as oee_percentage FROM production_log WHERE machine_id = 5 AND log_time >= '{current_date_str} 00:00:00' AND log_time <= '{current_date_str} 23:59:59'"
-
-                **Example 3: Top 5 Machines by Downtime**
-                User: "most problematic machines this week"
-                SQL: "SELECT machine_id, SUM(duration_minutes) as total_downtime FROM downtime_log WHERE downtime_date >= DATE_SUB('{current_date_str}', INTERVAL 7 DAY) GROUP BY machine_id ORDER BY total_downtime DESC LIMIT 5"
-
-                **Example 4: Yield / Quality Rate**
-                User: "quality rate of line 2 last month"
-                SQL: "SELECT (SUM(good_qty) / NULLIF(SUM(produced_qty), 0)) * 100 as quality_rate FROM production_log WHERE line_id = 2 AND log_time BETWEEN DATE_FORMAT(DATE_SUB('{current_date_str}', INTERVAL 1 MONTH), '%Y-%m-01') AND LAST_DAY(DATE_SUB('{current_date_str}', INTERVAL 1 MONTH))"
-
-                Respond ONLY with JSON: {{"sql": "...", "thought": "...", "suggested_chart": "bar|line|area|pie|none"}}
+                Respond ONLY with JSON: {{"sql": "...", "thought": "brief technical note", "suggested_chart": "bar|line|area|pie|none"}}
                 - Use "none" if results are scalar (e.g., just a count) or if not applicable.
                 - If the user explicitly asks for a chart type (e.g. "show as pie chart"), you MUST respect that in suggested_chart.
                 """
@@ -884,36 +1111,101 @@ class NLPEngine:
                 result = json.loads(response.choices[0].message.content)
                 sql_out = result.get("sql", "").strip()
 
-                if sql_out:
-                    # Validate that the table in the SQL actually exists in the schema
+                # ── VALIDATION + RETRY LOOP (max 1 retry for column errors) ──
+                max_retries = 1
+                for attempt in range(max_retries + 1):
+                    if not sql_out:
+                        break
+
+                    # 1. TABLE VALIDATION
                     valid_tables = [t["name"].lower() for t in schema]
-                    potential_tables = re.findall(r"FROM\s+(\w+)", sql_out, re.IGNORECASE)
-                    join_tables = re.findall(r"JOIN\s+(\w+)", sql_out, re.IGNORECASE)
+                    rag_tables = [t["name"].lower() for t in llm_schema]
+                    all_valid = set(valid_tables + rag_tables)
                     
-                    all_tables_exist = all(t.lower() in valid_tables for t in potential_tables + join_tables)
+                    clean_sql = re.sub(r'["`\'\[\]]', '', sql_out)
+                    potential_tables = [t.split('.')[-1] for t in re.findall(r"FROM\s+([a-zA-Z0-9_\.]+)", clean_sql, re.IGNORECASE)]
+                    join_tables = [t.split('.')[-1] for t in re.findall(r"JOIN\s+([a-zA-Z0-9_\.]+)", clean_sql, re.IGNORECASE)]
+                    
+                    sql_keywords = {'select', 'where', 'group', 'order', 'having', 'limit', 'union', 'case', 'when', 'then', 'else', 'end', 'as', 'on', 'and', 'or', 'not', 'in', 'is', 'null', 'between', 'like', 'exists'}
+                    referenced_tables = [t for t in potential_tables + join_tables if t.lower() not in sql_keywords]
+                    
+                    missing_tables = [t for t in referenced_tables if t.lower() not in all_valid]
+                    
+                    if missing_tables:
+                        err_msg = f"⚠️ LLM REJECTED (attempt {attempt+1}): Non-existent tables: {missing_tables}\nSQL: {sql_out}"
+                        print(err_msg)
+                        sql_out = None
+                        break  # Table errors → fall through to heuristic
 
-                    if all_tables_exist:
-                        is_safe, error_msg = self._validate_sql_safety(sql_out)
-                        if not is_safe:
-                            return {"sql": "-- Not Found", "thought": error_msg, "confidence": 0}
+                    # 2. COLUMN VALIDATION (new!)
+                    cols_valid, col_error, bad_refs = self._validate_sql_columns(sql_out, schema)
+                    
+                    if not cols_valid:
+                        print(f"⚠️ LLM COLUMN ERROR (attempt {attempt+1}): {col_error}")
+                        
+                        if attempt < max_retries:
+                            # RETRY: Ask the LLM to fix its mistake with explicit feedback
+                            retry_msg = (
+                                f"ERROR: Your SQL has invalid column references. "
+                                f"{col_error}. "
+                                f"Re-read the SCHEMA carefully and fix the SQL. "
+                                f"Only use columns that ACTUALLY EXIST in each table. "
+                                f"Respond ONLY with the corrected JSON."
+                            )
+                            messages.append({"role": "assistant", "content": response.choices[0].message.content})
+                            messages.append({"role": "user", "content": retry_msg})
+                            
+                            print(f"🔄 Retrying LLM with column error feedback...")
+                            response = self.client.chat.completions.create(
+                                model=MODEL_NAME,
+                                messages=messages,
+                                response_format={"type": "json_object"},
+                                temperature=0.05
+                            )
+                            result = json.loads(response.choices[0].message.content)
+                            sql_out = result.get("sql", "").strip()
+                            continue  # Re-validate the new SQL
+                        else:
+                            print(f"⚠️ LLM still has column errors after retry. Falling back to heuristic.")
+                            sql_out = None
+                            break
 
-                        model_display = "GPT-4o" if "gpt-4o" in MODEL_NAME.lower() else "Llama 3.3 (70B)"
-                        rag_note = f" [RAG: {len(llm_schema)}/{len(schema)} tables]" if rag_active else ""
-                        return {
-                            "sql": sql_out,
-                            "thought": f"{model_display}{rag_note} Joined tables: {', '.join(potential_tables + join_tables)}. {result.get('thought', '')}",
-                            "confidence": 0.99,
-                            "suggested_chart": result.get("suggested_chart", "none"),
-                            "model": model_display,
-                            "rag_active": rag_active,
-                            "rag_tables_used": len(llm_schema) if rag_active else len(schema),
-                            "total_tables": len(schema)
-                        }
-                    else:
-                        print(f"LLM Hallucinated tables: {potential_tables}. Falling back.")
+                    # 3. SAFETY VALIDATION
+                    is_safe, error_msg = self._validate_sql_safety(sql_out)
+                    if not is_safe:
+                        print(f"⚠️ SQL REJECTED (Safety): {error_msg}")
+                        sql_out = None
+                        break
+                    
+                    # ✅ ALL VALIDATIONS PASSED
+                    model_display = "GPT-4o" if "gpt-4o" in MODEL_NAME.lower() else "Llama 3.3 (70B)"
+                    rag_note = f" [RAG: {len(llm_schema)}/{len(schema)} tables]" if rag_active else ""
+                    retry_note = " (auto-corrected)" if attempt > 0 else ""
+                    return {
+                        "sql": sql_out,
+                        "thought": f"{model_display}{rag_note}{retry_note} {result.get('thought', '')}",
+                        "confidence": 0.99 if attempt == 0 else 0.95,
+                        "suggested_chart": result.get("suggested_chart", "none"),
+                        "model": model_display,
+                        "rag_active": rag_active,
+                        "rag_tables_used": len(llm_schema) if rag_active else len(schema),
+                        "total_tables": len(schema)
+                    }
                 
             except Exception as e:
-                print(f"LLM Error: {e}")
+                err = f"LLM Error: {e}\n"
+                print(err)
+                with open("debug_error.txt", "a", encoding="utf-8") as f:
+                    f.write(err)
+                
+                # If it's a rate limit error, propagate it instead of silent fallback
+                if "429" in str(e) or "rate_limit" in str(e).lower():
+                    return {
+                        "sql": "-- Error",
+                        "thought": "LLM API Rate Limit Exceeded. Please wait a minute and try again.",
+                        "confidence": 0,
+                        "model": "Error Guard"
+                    }
 
         # ── 2. ROBUST HEURISTIC ENGINE (FALLBACK) ──
 

@@ -1,73 +1,74 @@
-# React + TypeScript + Vite
+# 🤖 NLP Data Bot - Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This is the user interface for the **NLP Industrial Data Bot**, powered by **Llama 3.1 (8B)**. It is built with a focus on premium aesthetics and responsive data visualization for industrial and MES datasets.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## 📦 Requirements (Installation)
 
-## React Compiler
+Unlike the Backend which uses `requirements.txt`, the Frontend uses the **`package.json`** file to handle all its dependencies and scripts.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### **The "Requirement" file:**
+> [!IMPORTANT]
+> **File:** [`package.json`](./package.json)  
+> This file lists all the libraries (React, Tailwind, Recharts, etc.) that the frontend needs to work. It is the exact equivalent of `requirements.txt` in Python.
 
-## Expanding the ESLint configuration
+---
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 🚀 Getting Started
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### **1. Install Dependencies**
+To install all the "requirements" listed in `package.json`, run:
+```bash
+npm install
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### **2. Run Development Server**
+To start the app with Hot Module Replacement (HMR), run:
+```bash
+npm run dev
 ```
+By default, the app will be available at: `http://localhost:3000` (or as specified in your terminal).
+
+---
+
+## ⚙️ Configuration (Environment Variables)
+
+Before running the application, ensure you have configured the environment variables. 
+
+1.  Create a `.env` file in the `nlp_frontend` directory (copy from `.env.example`).
+2.  Set the `VITE_API_URL` to point to your backend (default is `http://127.0.0.1:8000`).
+
+```env
+# Example .env content
+VITE_API_URL=http://127.0.0.1:8000
+VITE_APP_NAME="NLP Industrial Bot"
+```
+
+---
+
+## 🛠️ Tech Stack
+- **Framework:** [React 19](https://react.dev/)
+- **Build Tool:** [Vite](https://vite.dev/)
+- **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Styling:** [Tailwind CSS](https://tailwindcss.com/)
+- **Icons:** [Lucide React](https://lucide.dev/)
+- **Components:** Radix UI / Shadcn UI primitives
+- **Charts:** [Recharts](https://recharts.org/) & [Vega-Lite](https://vega.github.io/vega-lite/)
+
+---
+
+## ✨ UI Features
+- **Dark Mode First:** Premium high-contrast dark aesthetic.
+- **Glassmorphism:** Modern transparent UI elements with blur effects.
+- **Dynamic Charts:** Automatically renders data into interactive charts using Vega-Lite and Recharts.
+- **Responsive Tables:** Clean, sortable data grids for viewing SQL results.
+- **Typo Resilience Feedback:** Shows how the AI interpreted your query in real-time.
+
+---
+
+## 📁 Directory Structure
+- `/src/components`: UI building blocks (Buttons, Inputs, etc.)
+- `/src/pages`: Main application views (Dashboard, Login, Chat)
+- `/src/services`: API connection logic to the Backend
+- `/src/hooks`: Custom React logic for state and data fetching

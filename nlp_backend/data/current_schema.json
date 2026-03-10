@@ -1,0 +1,477 @@
+{
+    "schema": [
+        {
+            "name": "cost_log",
+            "columns": [
+                {
+                    "name": "cost_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_orders.order_id"
+                },
+                {
+                    "name": "labor_cost",
+                    "type": "DECIMAL(12, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "material_cost",
+                    "type": "DECIMAL(12, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "overhead_cost",
+                    "type": "DECIMAL(12, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "total_cost",
+                    "type": "DECIMAL(12, 2)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "downtime_log",
+            "columns": [
+                {
+                    "name": "downtime_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "machines.machine_id"
+                },
+                {
+                    "name": "downtime_date",
+                    "type": "DATE",
+                    "primary_key": false
+                },
+                {
+                    "name": "start_time",
+                    "type": "DATETIME",
+                    "primary_key": false
+                },
+                {
+                    "name": "end_time",
+                    "type": "DATETIME",
+                    "primary_key": false
+                },
+                {
+                    "name": "duration_minutes",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "reason",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "energy_log",
+            "columns": [
+                {
+                    "name": "energy_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "machines.machine_id"
+                },
+                {
+                    "name": "log_date",
+                    "type": "DATE",
+                    "primary_key": false
+                },
+                {
+                    "name": "energy_kwh",
+                    "type": "DECIMAL(12, 2)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "machines",
+            "columns": [
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "line_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_lines.line_id"
+                },
+                {
+                    "name": "machine_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "ideal_cycle_time_sec",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "status",
+                    "type": "VARCHAR(50)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "maintenance_log",
+            "columns": [
+                {
+                    "name": "maintenance_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "machines.machine_id"
+                },
+                {
+                    "name": "breakdown_start",
+                    "type": "DATETIME",
+                    "primary_key": false
+                },
+                {
+                    "name": "breakdown_end",
+                    "type": "DATETIME",
+                    "primary_key": false
+                },
+                {
+                    "name": "repair_time_min",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "failure_type",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "material_consumption",
+            "columns": [
+                {
+                    "name": "consumption_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_orders.order_id"
+                },
+                {
+                    "name": "material_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "materials.material_id"
+                },
+                {
+                    "name": "actual_qty_used",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "expected_qty",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "materials",
+            "columns": [
+                {
+                    "name": "material_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "material_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "standard_qty_per_unit",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "operators",
+            "columns": [
+                {
+                    "name": "operator_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "operator_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "skill_level",
+                    "type": "VARCHAR(50)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "plants",
+            "columns": [
+                {
+                    "name": "plant_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "plant_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "location",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "production_lines",
+            "columns": [
+                {
+                    "name": "line_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "plant_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "plants.plant_id"
+                },
+                {
+                    "name": "line_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "production_log",
+            "columns": [
+                {
+                    "name": "log_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "machines.machine_id"
+                },
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_orders.order_id"
+                },
+                {
+                    "name": "operator_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "operators.operator_id"
+                },
+                {
+                    "name": "produced_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "good_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "reject_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "production_time_min",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "downtime_min",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "shift",
+                    "type": "VARCHAR(20)",
+                    "primary_key": false
+                },
+                {
+                    "name": "log_time",
+                    "type": "DATETIME",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "production_orders",
+            "columns": [
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "product_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "machine_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "order_date",
+                    "type": "DATE",
+                    "primary_key": false
+                },
+                {
+                    "name": "quantity",
+                    "type": "INTEGER",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "products",
+            "columns": [
+                {
+                    "name": "product_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "product_name",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "standard_cycle_time_sec",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                },
+                {
+                    "name": "standard_cost",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "quality_inspections",
+            "columns": [
+                {
+                    "name": "inspection_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_orders.order_id"
+                },
+                {
+                    "name": "inspected_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "good_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "defect_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "defect_type",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "inspection_time",
+                    "type": "DATETIME",
+                    "primary_key": false
+                }
+            ]
+        },
+        {
+            "name": "rework_log",
+            "columns": [
+                {
+                    "name": "rework_id",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "order_id",
+                    "type": "INTEGER",
+                    "primary_key": false,
+                    "foreign_key": "production_orders.order_id"
+                },
+                {
+                    "name": "reworked_qty",
+                    "type": "INTEGER",
+                    "primary_key": false
+                },
+                {
+                    "name": "reason",
+                    "type": "VARCHAR(100)",
+                    "primary_key": false
+                },
+                {
+                    "name": "rework_cost",
+                    "type": "DECIMAL(10, 2)",
+                    "primary_key": false
+                }
+            ]
+        }
+    ]
+}

@@ -372,8 +372,21 @@ const ResultsTable = ({ result, chartImage, chartSpec }: ResultsTableProps) => {
     );
 
     const getCellValue = (row: any, col: string, colIdx: number): string => {
-        if (Array.isArray(row)) return String(row[colIdx] ?? '');
-        return String((row as Record<string, any>)[col] ?? '');
+        let val: any;
+        if (Array.isArray(row)) {
+            val = row[colIdx];
+        } else {
+            val = (row as Record<string, any>)[col];
+        }
+
+        if (val == null) return '';
+
+        const colLower = col.toLowerCase();
+        if (typeof val === 'number' && (colLower.includes('oee') || colLower.includes('%') || colLower.includes('rate') || colLower.includes('percentage'))) {
+            return `${val.toFixed(2)}%`;
+        }
+
+        return String(val);
     };
 
     const hasChart = !!(chartImage || chartSpec);

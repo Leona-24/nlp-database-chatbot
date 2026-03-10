@@ -3,8 +3,8 @@ from sqlalchemy import create_engine, text, inspect
 import pandas as pd
 from typing import List, Dict, Any, Optional
 
-# Base directory for the database files
-BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+# Base directory for the project (nlp_backend)
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 # Ensure data directory exists
