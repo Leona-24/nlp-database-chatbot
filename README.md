@@ -89,11 +89,31 @@ npm run dev -- --port 3000
 ## 📖 Usage Guide
 
 1. **Register/Login**: Start by creating a new account. 
-2. **Connect**: Click **"Connect Database"**. Use **"Load Demo Data"** to explore the sample datasets (Students, Customers, Orders).
+2. **Connect**: Click **"Connect Database"**. 
+   - **Demo Data**: Use **"Load Demo Data"** to explore sample datasets like Students and Customers.
+   - **Custom MySQL**: To connect your own MySQL database, select **MySQL** as the type and provide your Host, Port (default `3306`), Database Name, and Credentials. The AI will automatically map your unique schema.
 3. **Query**: Enter a natural language question in the search bar:
    - *"Show all machine name"*
    - *"What is efficiency in the month of january"*
 4. **Go Deep**: Explore the **Schema Viewer** to see exactly what the AI has mapped from your database.
+
+---
+
+## 🗄️ Connecting Your Own MySQL
+For production or custom datasets, follow these connection steps:
+
+| Field | Description | Example |
+| :--- | :--- | :--- |
+| **Type** | Choose "MySQL" | `MySQL` |
+| **Host** | IP or Domain of your server | `localhost` or `192.168.1.5` |
+| **Port** | Default MySQL port | `3306` |
+| **Database** | Name of the database you want to query | `inventory_db` |
+| **Username** | Database user with SELECT permissions | `root` |
+| **Password** | Secure login password | `**********` |
+
+> [!TIP]
+> **Performance Tip**: Ensure your MySQL server allows remote connections if the backend is hosted on a different machine. The system uses `pymysql` for secure, performant communication.
+
 
 ---
 
