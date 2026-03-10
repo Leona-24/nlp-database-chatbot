@@ -7,7 +7,7 @@
 **Model**: Llama 3.1 8B Versatile (upgraded from Llama 3.1 7B)
 
 
-#### Why Llama 3.3 is Better:
+#### Why Llama 3.1 is Better:
 - 🧠 **Latest Model**: Most recent Llama release with improved reasoning
 - 🎯 **Better Accuracy**: Superior natural language understanding
 - 📊 **Improved SQL Generation**: Handles complex JOIN queries better
