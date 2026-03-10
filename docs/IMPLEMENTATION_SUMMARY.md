@@ -4,7 +4,7 @@
 
 ### 1. **🚀 Upgraded to Best LLM Model**
 
-**Model**: Llama 3.3 70B Versatile (upgraded from Llama 3.0 70B)
+**Model**: Llama 3.1 8B Versatile (upgraded from Llama 3.1 7B)
 
 
 #### Why Llama 3.3 is Better:
@@ -17,7 +17,7 @@
 #### Configuration:
 ```python
 # In nlp_backend/nlp_service.py
-MODEL_NAME = "llama-3.3-70b-versatile"  # ← Upgraded
+MODEL_NAME = "llama-3.1-8b-versatile"  # ← Upgraded
 API_URL = "https://api.groq.com/openai/v1"
 ```
 
@@ -75,7 +75,7 @@ LIKE '%pen%'  # Matches: pen, pencil, open, opened, etc.
 
 | Feature | Before | After |
 |---------|--------|-------|
-| **LLM Model** | Llama 3.0 70B | **Llama 3.3 70B** ✨ |
+| **LLM Model** | Llama 3.0 70B | **Llama 3.1 8B** ✨ |
 | **Query: "pen"** | Returns pen + pencil ❌ | Returns pen only ✅ |
 | **Security Layers** | 1 (database check) | **3 layers** 🔒 |
 | **Blocked Operations** | DROP, DELETE | **All 16 modification types** |
@@ -167,7 +167,7 @@ Try these queries in your application:
 ## 📁 Files Modified
 
 1. **`nlp_backend/nlp_service.py`** (Main improvements)
-   - Upgraded to Llama 3.3 70B
+   - Upgraded to Llama 3.1 8B
    - Added `_validate_sql_safety()` method
    - Fixed precision matching (line 186)
    - Enhanced LLM prompt with security + precision rules
@@ -193,7 +193,7 @@ Try these queries in your application:
 
 ## 🎯 Key Achievements
 
-✅ **Better AI**: Upgraded to Llama 3.3 70B (latest & best free model)
+✅ **Better AI**: Upgraded to Llama 3.1 8B (latest & best free model)
 ✅ **Security**: 3-layer protection prevents ALL data modifications
 ✅ **Precision**: Fixed "pen" vs "pencil" matching issue
 ✅ **Tested**: Security suite confirms all protections work
