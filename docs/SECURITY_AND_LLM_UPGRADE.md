@@ -4,8 +4,8 @@
 
 ### 1. **Upgraded to Best-in-Class LLM Model**
 
-#### **Primary Option: Llama 3.3 70B (Recommended - Free)**
-- **Model**: `llama-3.3-70b-versatile`
+#### **Primary Option: Llama 3.1 8B (Recommended - Free)**
+- **Model**: `llama-3.1-8b-versatile`
 - **Provider**: Groq (Free API with high rate limits)
 - **Capabilities**:
   - ✨ Latest and most advanced Llama model (upgraded from 3.0 to 3.3)
@@ -62,7 +62,7 @@ Final validation before database execution:
    ```python
    API_KEY = "YOUR_GROQ_API_KEY_HERE"
    API_URL = "https://api.groq.com/openai/v1"
-   MODEL_NAME = "llama-3.3-70b-versatile"
+   MODEL_NAME = "llama-3.1-8b-versatile"
    ```
 
 ### Option 2: Use GPT-4o (Premium)
@@ -171,7 +171,7 @@ Results returned to user
 User: "tell me how pencil had been bought"
 Response: 0 results (struggled with past tense and synonyms)
 
-### After (Llama 3.3):
+### After (Llama 3.1):
 User: "tell me how pencil had been bought"
 Response: Correctly interprets → generates JOIN query → returns purchase data
 
